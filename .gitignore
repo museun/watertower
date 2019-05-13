@@ -1,0 +1,8 @@
+/target
+**/*.rs.bk
+Cargo.lock
+etc/*.class
+!etc/*.java
+*.txt
+*.json
+*.log
