@@ -338,48 +338,80 @@ impl<R: Read> ReadType<R> for StackMapFrame {
     fn read(reader: &mut Reader<'_, R>) -> Result<Self::Output> {
         let ty = reader.read_u8("stack_map_frame type")?;
         match ty {
-            0...63 => Ok(StackMapFrame::SameFrame { offset: ty }),
-            64...127 => Ok(StackMapFrame::SameLocalsOneStackItemFrame {
-                offset: ty - 64,
-                stack_item: VerificationType::read(reader)?,
-            }),
-            247 => Ok(StackMapFrame::SameLocalsOneStackItemFrameExtended {
-                offset: reader.read_u16("same_locals_one_stack_item_frame_extended")?,
-                stack_item: VerificationType::read(reader)?,
-            }),
-            248...250 => Ok(StackMapFrame::ChopFrame {
-                offset: reader.read_u16("chop_frame")?,
-                absent_locals: (251 - ty),
-            }),
-            251 => Ok(StackMapFrame::SameFrameExtended {
-                offset: reader.read_u16("same_frame_extended")?,
-            }),
-            252...254 => {
-                let offset = reader.read_u16("append_frame")?;
-                let new_locals = reader.read_many(
-                    |reader| reader.read_u16("num_locals"),
-                    VerificationType::read,
-                )?;
-                Ok(StackMapFrame::AppendFrame { offset, new_locals })
-            }
-            255 => {
-                let offset = reader.read_u16("full_frame")?;
-                let locals = reader.read_many(
-                    |reader| reader.read_u16("num_locals"),
-                    VerificationType::read,
-                )?;
-                let stack_items = reader.read_many(
-                    |reader| reader.read_u16("num_stack_items"),
-                    VerificationType::read,
-                )?;
-                Ok(StackMapFrame::FullFrame {
-                    offset,
-                    locals,
-                    stack_items,
-                })
-            }
+            0...63 => Self::same_frame(reader, ty),
+            64...127 => Self::same_locals_one_stack_item_frame(reader, ty),
+            247 => Self::same_locals_one_stack_item_frame_extended(reader, ty),
+            248...250 => Self::chop_frame(reader, ty),
+            251 => Self::same_frame_extended(reader, ty),
+            252...254 => Self::append_frame(reader, ty),
+            255 => Self::full_frame(reader, ty),
             _ => Err(Error::InvalidStackFrameType(ty)),
         }
+    }
+}
+
+impl StackMapFrame {
+    fn same_frame<R: Read>(_: &mut Reader<'_, R>, ty: u8) -> Result<Self> {
+        Ok(StackMapFrame::SameFrame { offset: ty })
+    }
+
+    fn same_frame_extended<R: Read>(reader: &mut Reader<'_, R>, _: u8) -> Result<Self> {
+        Ok(StackMapFrame::SameFrameExtended {
+            offset: reader.read_u16("same_frame_extended")?,
+        })
+    }
+
+    fn same_locals_one_stack_item_frame<R: Read>(
+        reader: &mut Reader<'_, R>,
+        ty: u8,
+    ) -> Result<Self> {
+        Ok(StackMapFrame::SameLocalsOneStackItemFrame {
+            offset: ty - 64,
+            stack_item: VerificationType::read(reader)?,
+        })
+    }
+
+    fn same_locals_one_stack_item_frame_extended<R: Read>(
+        reader: &mut Reader<'_, R>,
+        _: u8,
+    ) -> Result<Self> {
+        Ok(StackMapFrame::SameLocalsOneStackItemFrameExtended {
+            offset: reader.read_u16("same_locals_one_stack_item_frame_extended")?,
+            stack_item: VerificationType::read(reader)?,
+        })
+    }
+
+    fn chop_frame<R: Read>(reader: &mut Reader<'_, R>, ty: u8) -> Result<Self> {
+        Ok(StackMapFrame::ChopFrame {
+            offset: reader.read_u16("chop_frame")?,
+            absent_locals: (251 - ty),
+        })
+    }
+
+    fn append_frame<R: Read>(reader: &mut Reader<'_, R>, _: u8) -> Result<Self> {
+        let offset = reader.read_u16("append_frame")?;
+        let new_locals = reader.read_many(
+            |reader| reader.read_u16("num_locals"),
+            VerificationType::read,
+        )?;
+        Ok(StackMapFrame::AppendFrame { offset, new_locals })
+    }
+
+    fn full_frame<R: Read>(reader: &mut Reader<'_, R>, _: u8) -> Result<Self> {
+        let offset = reader.read_u16("full_frame")?;
+        let locals = reader.read_many(
+            |reader| reader.read_u16("num_locals"),
+            VerificationType::read,
+        )?;
+        let stack_items = reader.read_many(
+            |reader| reader.read_u16("num_stack_items"),
+            VerificationType::read,
+        )?;
+        Ok(StackMapFrame::FullFrame {
+            offset,
+            locals,
+            stack_items,
+        })
     }
 }
 
