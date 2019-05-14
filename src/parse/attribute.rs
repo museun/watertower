@@ -258,8 +258,8 @@ impl Attribute {
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct BootstrapMethods {
-    method: ConstantIndex,
-    arguments: Vec<ConstantIndex>,
+    pub method: ConstantIndex,
+    pub arguments: Vec<ConstantIndex>,
 }
 
 #[derive(PartialEq, Debug, Clone)]
