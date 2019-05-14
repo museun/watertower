@@ -5,6 +5,7 @@ use super::*;
 pub trait ReadType<'a, R> {
     type Output;
     type Context;
+
     fn read(reader: &mut Reader<'_, R>, context: &'a Self::Context) -> Result<Self::Output>;
 }
 

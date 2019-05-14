@@ -11,6 +11,7 @@ pub struct Method {
 impl<'a, R: Read> ReadType<'a, R> for Method {
     type Output = Self;
     type Context = ReadContext<'a>;
+
     fn read(reader: &mut Reader<'_, R>, context: &Self::Context) -> Result<Self> {
         let flags = reader
             .read_u16("access_flags")
