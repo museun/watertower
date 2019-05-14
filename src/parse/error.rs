@@ -8,6 +8,7 @@ pub enum Error {
         msg: String,
         error: std::io::Error,
     },
+    InvalidClassFile,
     Expected {
         got: String,
         expected: String,
@@ -62,6 +63,7 @@ impl std::fmt::Display for Error {
         use Error::*;
         match self {
             Io { msg, error } => write!(f, "expected {}, got a read error: {}", msg, error),
+            InvalidClassFile => write!(f, "invalid class file"),
             Expected { got, expected } => write!(f, "expected: {}, got {}", expected, got),
             UnknownTag { tag } => write!(f, "unknown tag: 0x{:02X}", tag),
             InvalidMethodHandleKind { kind } => {

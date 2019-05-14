@@ -40,13 +40,8 @@ impl ClassFile {
     {
         let mut reader = reader.into();
 
-        const MAGIC: u32 = 0xCAFE_BABE;
-        let magic = reader.read_u32("magic")?;
-        if magic != MAGIC {
-            return Err(Error::Expected {
-                got: format!("{:#X?}", magic),
-                expected: format!("{:#X?}", MAGIC),
-            });
+        if reader.read_u32("magic")? != 0xCAFE_BABE {
+            return Err(Error::InvalidClassFile);
         }
 
         let minor_version = reader.read_u16("minor_version")?;
