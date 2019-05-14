@@ -1,6 +1,5 @@
 use super::*;
 
-#[derive(Default)]
 pub struct ClassFile {
     pub minor_version: u16,
     pub major_version: u16,
@@ -107,7 +106,6 @@ pub struct InnerClassInfo {
 }
 
 bitflags! {
-    #[derive(Default)]
     pub struct ClassFlags: u16 {
         const PUBLIC     = 0x0001;
         const FINAL      = 0x0010;

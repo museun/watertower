@@ -1,6 +1,10 @@
 #![allow(dead_code)]
 type Result<T> = std::result::Result<T, Error>;
 
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::rc::Rc;
+
 use crate::parse::types as ty;
 use crate::parse::types::attribute as attr;
 
@@ -34,12 +38,58 @@ impl std::fmt::Display for Error {
 #[derive(Debug, PartialEq)]
 pub enum Value {}
 
-#[derive(Default)]
+trait Lookup<T: Clone> {
+    fn lookup(&self, index: usize) -> Option<&T>;
+}
+
+struct Cache<T> {
+    map: RefCell<HashMap<usize, Rc<T>>>,
+    lookup: Box<dyn Lookup<T>>,
+}
+
+impl<T> Cache<T>
+where
+    T: Clone,
+{
+    pub fn new(lookup: Box<dyn Lookup<T>>) -> Self {
+        Self {
+            map: RefCell::new(HashMap::default()),
+            lookup,
+        }
+    }
+
+    pub fn get(&self, index: usize) -> Rc<T> {
+        let mut map = self.map.borrow_mut();
+
+        if let Some(code) = map.get(&index).map(Rc::clone) {
+            return code;
+        }
+
+        if let Some(method) = self.lookup.lookup(index).map(Clone::clone).map(Rc::new) {
+            map.insert(index, Rc::clone(&method));
+            return method;
+        }
+
+        unimplemented!("what to do here?")
+    }
+}
+
+struct CodeLookup(Rc<ty::ClassFile>);
+
+impl Lookup<attr::Code> for CodeLookup {
+    fn lookup(&self, index: usize) -> Option<&attr::Code> {
+        self.0.methods.get(index).and_then(ty::Method::get_code)
+    }
+}
+
 pub struct Interpreter {
-    classfile: ty::ClassFile,
+    classfile: Rc<ty::ClassFile>,
     pc: usize,
     stack: Vec<Value>,
     sp: usize,
+
+    offset: usize,
+    code_cache: Cache<attr::Code>,
 }
 
 impl Interpreter {
@@ -48,51 +98,261 @@ impl Interpreter {
         R: std::io::Read + 'a,
         I: Into<crate::parse::Reader<'a, R>>,
     {
+        let out = std::io::stdout();
+        let mut out = out.lock();
         ty::ClassFile::read(reader)
-            .map(|classfile| Self {
-                classfile,
-                ..Default::default()
+            .map(|classfile| {
+                classfile.constant_pool.iter().for_each(|constant| {
+                    constant
+                        .dump(0, &mut out, &classfile.constant_pool)
+                        .expect("write")
+                });
+
+                let classfile = Rc::new(classfile);
+                Self {
+                    classfile: Rc::clone(&classfile),
+                    code_cache: Cache::new(Box::new(CodeLookup(Rc::clone(&classfile)))),
+                    offset: 0,
+                    pc: 0,
+                    sp: 0,
+                    stack: vec![],
+                }
             })
             .map_err(Into::into)
     }
 
-    pub fn run(self) {
-        for method in self.classfile.methods {
-            eprintln!(
-                "method: {}",
-                match method
-                    .name
-                    .lookup(self.classfile.constant_pool.as_slice())
-                    .unwrap()
-                {
-                    ty::Constant::Utf8(s) => s,
-                    _ => unreachable!(),
-                }
-            );
+    pub fn run(self) {}
 
-            for attribute in method.attributes {
-                if let ty::Attribute::Code(attr::Code { code, .. }) = attribute {
-                    for inst in code {
-                        let inst = Instruction::lookup(inst).unwrap();
-                        eprintln!(
-                            "0x{:02X} {:?} -> arity: {}\n    {}\n",
-                            inst.opcode(),
-                            inst,
-                            inst.arity(),
-                            inst.description(),
-                        );
-                    }
-                }
-            }
-            eprintln!();
-        }
+    fn push(&mut self, val: impl Into<Value>) {
+        self.sp += 1;
+        self.stack.push(val.into());
     }
 
-    // push
-    // pop
+    fn pop(&mut self) -> Value {
+        self.sp -= 1;
+        self.stack.pop().expect("stack must not be empty")
+    }
 
-    fn step(&mut self) -> Result<()> {
-        Ok(())
+    fn step(&mut self) {
+        let code = self.code_cache.get(self.offset);
+        for code in &code.code {
+            self.execute(*code);
+        }
+        self.offset += 1;
+    }
+
+    fn execute(&mut self, op: u8) {
+        use Instruction::*;
+        match Instruction::lookup(op) {
+            Some(inst) => match (inst.arity(), inst) {
+                (d, AALOAD) => unimplemented!(),
+                (d, AASTORE) => unimplemented!(),
+                (d, ACONST_NULL) => unimplemented!(),
+                (d, ALOAD) => unimplemented!(),
+                (d, ALOAD_0) => unimplemented!(),
+                (d, ALOAD_1) => unimplemented!(),
+                (d, ALOAD_2) => unimplemented!(),
+                (d, ALOAD_3) => unimplemented!(),
+                (d, ANEWARRAY) => unimplemented!(),
+                (d, ARETURN) => unimplemented!(),
+                (d, ARRAYLENGTH) => unimplemented!(),
+                (d, ASTORE) => unimplemented!(),
+                (d, ASTORE_0) => unimplemented!(),
+                (d, ASTORE_1) => unimplemented!(),
+                (d, ASTORE_2) => unimplemented!(),
+                (d, ASTORE_3) => unimplemented!(),
+                (d, ATHROW) => unimplemented!(),
+                (d, BALOAD) => unimplemented!(),
+                (d, BASTORE) => unimplemented!(),
+                (d, BIPUSH) => unimplemented!(),
+                (d, BREAKPOINT) => unimplemented!(),
+                (d, CALOAD) => unimplemented!(),
+                (d, CASTORE) => unimplemented!(),
+                (d, CHECKCAST) => unimplemented!(),
+                (d, D2F) => unimplemented!(),
+                (d, D2I) => unimplemented!(),
+                (d, D2L) => unimplemented!(),
+                (d, DADD) => unimplemented!(),
+                (d, DALOAD) => unimplemented!(),
+                (d, DASTORE) => unimplemented!(),
+                (d, DCMPG) => unimplemented!(),
+                (d, DCMPL) => unimplemented!(),
+                (d, DCONST_0) => unimplemented!(),
+                (d, DCONST_1) => unimplemented!(),
+                (d, DDIV) => unimplemented!(),
+                (d, DLOAD) => unimplemented!(),
+                (d, DLOAD_0) => unimplemented!(),
+                (d, DLOAD_1) => unimplemented!(),
+                (d, DLOAD_2) => unimplemented!(),
+                (d, DLOAD_3) => unimplemented!(),
+                (d, DMUL) => unimplemented!(),
+                (d, DNEG) => unimplemented!(),
+                (d, DREM) => unimplemented!(),
+                (d, DRETURN) => unimplemented!(),
+                (d, DSTORE) => unimplemented!(),
+                (d, DSTORE_0) => unimplemented!(),
+                (d, DSTORE_1) => unimplemented!(),
+                (d, DSTORE_2) => unimplemented!(),
+                (d, DSTORE_3) => unimplemented!(),
+                (d, DSUB) => unimplemented!(),
+                (d, DUP) => unimplemented!(),
+                (d, DUP_X1) => unimplemented!(),
+                (d, DUP_X2) => unimplemented!(),
+                (d, DUP2) => unimplemented!(),
+                (d, DUP2_X1) => unimplemented!(),
+                (d, DUP2_X2) => unimplemented!(),
+                (d, F2D) => unimplemented!(),
+                (d, F2I) => unimplemented!(),
+                (d, F2L) => unimplemented!(),
+                (d, FADD) => unimplemented!(),
+                (d, FALOAD) => unimplemented!(),
+                (d, FASTORE) => unimplemented!(),
+                (d, FCMPG) => unimplemented!(),
+                (d, FCMPL) => unimplemented!(),
+                (d, FCONST_0) => unimplemented!(),
+                (d, FCONST_1) => unimplemented!(),
+                (d, FCONST_2) => unimplemented!(),
+                (d, FDIV) => unimplemented!(),
+                (d, FLOAD) => unimplemented!(),
+                (d, FLOAD_0) => unimplemented!(),
+                (d, FLOAD_1) => unimplemented!(),
+                (d, FLOAD_2) => unimplemented!(),
+                (d, FLOAD_3) => unimplemented!(),
+                (d, FMUL) => unimplemented!(),
+                (d, FNEG) => unimplemented!(),
+                (d, FREM) => unimplemented!(),
+                (d, FRETURN) => unimplemented!(),
+                (d, FSTORE) => unimplemented!(),
+                (d, FSTORE_0) => unimplemented!(),
+                (d, FSTORE_1) => unimplemented!(),
+                (d, FSTORE_2) => unimplemented!(),
+                (d, FSTORE_3) => unimplemented!(),
+                (d, FSUB) => unimplemented!(),
+                (d, GETFIELD) => unimplemented!(),
+                (d, GETSTATIC) => unimplemented!(),
+                (d, GOTO) => unimplemented!(),
+                (d, GOTO_W) => unimplemented!(),
+                (d, I2B) => unimplemented!(),
+                (d, I2C) => unimplemented!(),
+                (d, I2D) => unimplemented!(),
+                (d, I2F) => unimplemented!(),
+                (d, I2L) => unimplemented!(),
+                (d, I2S) => unimplemented!(),
+                (d, IADD) => unimplemented!(),
+                (d, IALOAD) => unimplemented!(),
+                (d, IAND) => unimplemented!(),
+                (d, IASTORE) => unimplemented!(),
+                (d, ICONST_M1) => unimplemented!(),
+                (d, ICONST_0) => unimplemented!(),
+                (d, ICONST_1) => unimplemented!(),
+                (d, ICONST_2) => unimplemented!(),
+                (d, ICONST_3) => unimplemented!(),
+                (d, ICONST_4) => unimplemented!(),
+                (d, ICONST_5) => unimplemented!(),
+                (d, IDIV) => unimplemented!(),
+                (d, IF_ACMPEQ) => unimplemented!(),
+                (d, IF_ACMPNE) => unimplemented!(),
+                (d, IF_ICMPEQ) => unimplemented!(),
+                (d, IF_ICMPGE) => unimplemented!(),
+                (d, IF_ICMPGT) => unimplemented!(),
+                (d, IF_ICMPLE) => unimplemented!(),
+                (d, IF_ICMPLT) => unimplemented!(),
+                (d, IF_ICMPNE) => unimplemented!(),
+                (d, IFEQ) => unimplemented!(),
+                (d, IFGE) => unimplemented!(),
+                (d, IFGT) => unimplemented!(),
+                (d, IFLE) => unimplemented!(),
+                (d, IFLT) => unimplemented!(),
+                (d, IFNE) => unimplemented!(),
+                (d, IFNONNULL) => unimplemented!(),
+                (d, IFNULL) => unimplemented!(),
+                (d, IINC) => unimplemented!(),
+                (d, ILOAD) => unimplemented!(),
+                (d, ILOAD_0) => unimplemented!(),
+                (d, ILOAD_1) => unimplemented!(),
+                (d, ILOAD_2) => unimplemented!(),
+                (d, ILOAD_3) => unimplemented!(),
+                (d, IMPDEP1) => unimplemented!(),
+                (d, IMPDEP2) => unimplemented!(),
+                (d, IMUL) => unimplemented!(),
+                (d, INEG) => unimplemented!(),
+                (d, INSTANCEOF) => unimplemented!(),
+                (d, INVOKEDYNAMIC) => unimplemented!(),
+                (d, INVOKEINTERFACE) => unimplemented!(),
+                (d, INVOKESPECIAL) => unimplemented!(),
+                (d, INVOKESTATIC) => unimplemented!(),
+                (d, INVOKEVIRTUAL) => unimplemented!(),
+                (d, IOR) => unimplemented!(),
+                (d, IREM) => unimplemented!(),
+                (d, IRETURN) => unimplemented!(),
+                (d, ISHL) => unimplemented!(),
+                (d, ISHR) => unimplemented!(),
+                (d, ISTORE) => unimplemented!(),
+                (d, ISTORE_0) => unimplemented!(),
+                (d, ISTORE_1) => unimplemented!(),
+                (d, ISTORE_2) => unimplemented!(),
+                (d, ISTORE_3) => unimplemented!(),
+                (d, ISUB) => unimplemented!(),
+                (d, IUSHR) => unimplemented!(),
+                (d, IXOR) => unimplemented!(),
+                (d, JSR) => unimplemented!(),
+                (d, JSR_W) => unimplemented!(),
+                (d, L2D) => unimplemented!(),
+                (d, L2F) => unimplemented!(),
+                (d, L2I) => unimplemented!(),
+                (d, LADD) => unimplemented!(),
+                (d, LALOAD) => unimplemented!(),
+                (d, LAND) => unimplemented!(),
+                (d, LASTORE) => unimplemented!(),
+                (d, LCMP) => unimplemented!(),
+                (d, LCONST_0) => unimplemented!(),
+                (d, LCONST_1) => unimplemented!(),
+                (d, LDC) => unimplemented!(),
+                (d, LDC_W) => unimplemented!(),
+                (d, LDC2_W) => unimplemented!(),
+                (d, LDIV) => unimplemented!(),
+                (d, LLOAD) => unimplemented!(),
+                (d, LLOAD_0) => unimplemented!(),
+                (d, LLOAD_1) => unimplemented!(),
+                (d, LLOAD_2) => unimplemented!(),
+                (d, LLOAD_3) => unimplemented!(),
+                (d, LMUL) => unimplemented!(),
+                (d, LNEG) => unimplemented!(),
+                (d, LOOKUPSWITCH) => unimplemented!(),
+                (d, LOR) => unimplemented!(),
+                (d, LREM) => unimplemented!(),
+                (d, LRETURN) => unimplemented!(),
+                (d, LSHL) => unimplemented!(),
+                (d, LSHR) => unimplemented!(),
+                (d, LSTORE) => unimplemented!(),
+                (d, LSTORE_0) => unimplemented!(),
+                (d, LSTORE_1) => unimplemented!(),
+                (d, LSTORE_2) => unimplemented!(),
+                (d, LSTORE_3) => unimplemented!(),
+                (d, LSUB) => unimplemented!(),
+                (d, LUSHR) => unimplemented!(),
+                (d, LXOR) => unimplemented!(),
+                (d, MONITORENTER) => unimplemented!(),
+                (d, MONITOREXIT) => unimplemented!(),
+                (d, MULTIANEWARRAY) => unimplemented!(),
+                (d, NEW) => unimplemented!(),
+                (d, NEWARRAY) => unimplemented!(),
+                (d, NOP) => unimplemented!(),
+                (d, POP) => unimplemented!(),
+                (d, POP2) => unimplemented!(),
+                (d, PUTFIELD) => unimplemented!(),
+                (d, PUTSTATIC) => unimplemented!(),
+                (d, RET) => unimplemented!(),
+                (d, RETURN) => unimplemented!(),
+                (d, SALOAD) => unimplemented!(),
+                (d, SASTORE) => unimplemented!(),
+                (d, SIPUSH) => unimplemented!(),
+                (d, SWAP) => unimplemented!(),
+                (d, TABLESWITCH) => unimplemented!(),
+                (d, WIDE) => unimplemented!(),
+            },
+            _ => unimplemented!("bad instruction: 0x{:02X}", op),
+        }
     }
 }
 
@@ -102,9 +362,10 @@ mod tests {
     #[test]
     fn something() {
         let fi = std::fs::read("./etc/hello.class").unwrap();
-        Interpreter::new(&mut fi.as_slice())
-            .unwrap_or_else(|err| panic!("{}", err))
-            .run();
+        let mut interpreter = Interpreter::new(&mut fi.as_slice()) //
+            .unwrap_or_else(|err| panic!("{}", err));
+        interpreter.step();
+        interpreter.step();
     }
 }
 

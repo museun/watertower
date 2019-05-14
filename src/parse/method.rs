@@ -32,6 +32,17 @@ impl<'a, R: Read> ReadType<'a, R> for Method {
     }
 }
 
+impl Method {
+    pub fn get_code(&self) -> Option<&crate::parse::attribute::Code> {
+        for attribute in &self.attributes {
+            if let Attribute::Code(code) = attribute {
+                return Some(code);
+            }
+        }
+        None
+    }
+}
+
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
 pub struct MethodIndex(pub u16);
 

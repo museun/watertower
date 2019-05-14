@@ -1,6 +1,6 @@
 use super::*;
 
-#[derive(Default, Debug, Copy, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
 pub struct ConstantIndex(pub u16);
 
 impl<R: Read> ReadType<'_, R> for ConstantIndex {
@@ -200,4 +200,131 @@ fn read_utf8<R: Read>(reader: &mut Reader<'_, R>) -> Result<String> {
     std::str::from_utf8(&buf)
         .map(ToString::to_string)
         .map_err(|err| Error::InvalidString { error: err })
+}
+
+impl Constant {
+    pub fn dump<W: std::io::Write>(
+        &self,
+        depth: usize,
+        w: &mut W,
+        constants: &[Constant],
+    ) -> std::io::Result<()> {
+        let pad = " ".repeat(depth);
+        write!(w, "{}", pad)?;
+
+        macro_rules! recur {
+            ($index:expr) => {{
+                $index
+                    .lookup(constants)
+                    .unwrap()
+                    .dump(depth + 4, w, constants)
+            }};
+        }
+
+        match self {
+            Constant::Integer(d) => write!(w, "{} (Integer)", d),
+            Constant::Float(d) => write!(w, "{} (Float)", d),
+            Constant::Long(d) => write!(w, "{} (Long)", d),
+            Constant::Double(d) => write!(w, "{} (Double)", d),
+            Constant::Utf8(d) => write!(w, "'{}' (String)", d),
+
+            Constant::ClassRef(d) => {
+                writeln!(w, "ClassRef ->")?;
+                recur!(d)
+            }
+            Constant::StringRef(d) => {
+                writeln!(w, "StringRef ->")?;
+                recur!(d)
+            }
+            Constant::MethodType(d) => {
+                writeln!(w, "MethodType ->")?;
+                recur!(d)
+            }
+
+            Constant::MethodRef(MethodRef {
+                class,
+                name_and_type,
+            }) => {
+                writeln!(w, "MethodRef ->")?;
+                recur!(class)?;
+                recur!(name_and_type)
+            }
+
+            Constant::FieldRef(FieldRef {
+                class,
+                name_and_type,
+            }) => {
+                writeln!(w, "FieldRef ->")?;
+                recur!(class)?;
+                recur!(name_and_type)
+            }
+
+            Constant::InterfaceMethodRef(InterfaceMethodRef {
+                class,
+                name_and_type,
+            }) => {
+                writeln!(w, "InterfaceMethodRef ->")?;
+                recur!(class)?;
+                recur!(name_and_type)
+            }
+
+            Constant::NameAndTypeRef(NameAndTypeRef { name, descriptor }) => {
+                writeln!(w, "NameAndTypeRef ->")?;
+                recur!(name)?;
+                recur!(descriptor)
+            }
+
+            Constant::InvokeDynamicRef(InvokeDynamicRef {
+                bootstrap,
+                name_and_type: _name_and_type,
+            }) => {
+                writeln!(w, "InvokeDynamicRef ->")?;
+                // lookup boostrap method
+                panic!("bootstrap: {:?}", bootstrap);
+                // recur!(name_and_type)
+            }
+
+            Constant::MethodHandleRef(handle) => match handle {
+                MethodHandle::GetField(d) => {
+                    writeln!(w, "GetField ->")?;
+                    recur!(d)
+                }
+                MethodHandle::GetStatic(d) => {
+                    writeln!(w, "GetStatic ->")?;
+                    recur!(d)
+                }
+                MethodHandle::PutField(d) => {
+                    writeln!(w, "PutField ->")?;
+                    recur!(d)
+                }
+                MethodHandle::PutStatic(d) => {
+                    writeln!(w, "PutStatic ->")?;
+                    recur!(d)
+                }
+                MethodHandle::InvokeVirtual(d) => {
+                    writeln!(w, "InvokeVirtual ->")?;
+                    recur!(d)
+                }
+                MethodHandle::InvokeDynamic(d) => {
+                    writeln!(w, "InvokeDynamic ->")?;
+                    recur!(d)
+                }
+                MethodHandle::InvokeSpecial(d) => {
+                    writeln!(w, "InvokeSpecial ->")?;
+                    recur!(d)
+                }
+                MethodHandle::NewInvokeSpecial(d) => {
+                    writeln!(w, "NewInvokeSpecial ->")?;
+                    recur!(d)
+                }
+                MethodHandle::InvokeInterface(d) => {
+                    writeln!(w, "InvokeInterface ->")?;
+                    recur!(d)
+                }
+            },
+
+            Constant::Padding => return Ok(()),
+        }?;
+        writeln!(w)
+    }
 }
