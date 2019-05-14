@@ -27,11 +27,13 @@ pub enum Attribute {
     RuntimeInvisibleParameterAnnotations(RuntimeInvisibleParameterAnnotations),
 }
 
-impl<R: Read> ReadTypeContext<R> for Attribute {
+impl<'a, R: Read> ReadType<'a, R> for Attribute {
     type Output = Self;
-    fn read(reader: &mut Reader<'_, R>, constants: &[Constant]) -> Result<Self::Output> {
+    type Context = ReadContext<'a>;
+
+    fn read(reader: &mut Reader<'_, R>, context: &'a Self::Context) -> Result<Self::Output> {
         let index = reader.read_u16("attribute_name_index").map(ConstantIndex)?;
-        let constant = index.lookup(&constants)?;
+        let constant = index.lookup(&context.constants)?;
 
         let ty = match constant {
             Constant::Utf8(s) => s,
@@ -42,12 +44,16 @@ impl<R: Read> ReadTypeContext<R> for Attribute {
         let pos = reader.pos();
 
         macro_rules! parse_table {
-            ($($name:expr=> $ident:ident);* $(;)?) => {
-                 match ty.as_str() {
-                    $($name => $ident::read(reader, constants, index).map(Attribute::$ident),)*
-                    _ => Err(Error::UnknownAttributeType(ty.to_string())),
+            ($($name:expr=> $ident:ident);* $(;)?) => {{
+                let context = ReadIndexContext{
+                    constants: &context.constants,
+                    index,
                 };
-            };
+                match ty.as_str() {
+                    $($name => $ident::read(reader, &context).map(Attribute::$ident),)*
+                    _ => Err(Error::UnknownAttributeType(ty.to_string())),
+                }
+            }};
         }
 
         // https://docs.oracle.com/javase/specs/jvms/se8/html/jvms-4.html#jvms-4.7
@@ -92,6 +98,11 @@ impl<R: Read> ReadTypeContext<R> for Attribute {
     }
 }
 
+pub struct ReadIndexContext<'a> {
+    constants: &'a [Constant],
+    index: ConstantIndex,
+}
+
 #[derive(PartialEq, Debug, Clone)]
 pub struct Code {
     pub attribute_name: ConstantIndex,
@@ -102,13 +113,10 @@ pub struct Code {
     pub attributes: Vec<Attribute>,
 }
 
-impl<R: Read> ReadTypeContextIndexed<R> for Code {
+impl<'a, R: Read> ReadType<'a, R> for Code {
     type Output = Self;
-    fn read(
-        reader: &mut Reader<'_, R>,
-        constants: &[Constant],
-        index: ConstantIndex,
-    ) -> Result<Self::Output> {
+    type Context = ReadIndexContext<'a>;
+    fn read(reader: &mut Reader<'_, R>, context: &Self::Context) -> Result<Self::Output> {
         let max_stack = reader.read_u16("max_stack")?;
         let max_locals = reader.read_u16("max_locals")?;
 
@@ -119,16 +127,19 @@ impl<R: Read> ReadTypeContextIndexed<R> for Code {
 
         let exception_table = reader.read_many(
             |reader| reader.read_u16("code length").map(|d| d as usize),
-            ExceptionTableRow::read,
+            |reader| ExceptionTableRow::read(reader, &context),
         )?;
 
+        let ctx = ReadContext {
+            constants: &context.constants,
+        };
         let attributes = reader.read_many(
             |reader| reader.read_u16("attributes length"),
-            |reader| Attribute::read(reader, constants),
+            |reader| Attribute::read(reader, &ctx),
         )?;
 
         Ok(Self {
-            attribute_name: index,
+            attribute_name: context.index,
             max_stack,
             max_locals,
             code,
@@ -144,16 +155,13 @@ pub struct SourceFile {
     pub source_file: ConstantIndex,
 }
 
-impl<R: Read> ReadTypeContextIndexed<R> for SourceFile {
+impl<'a, R: Read> ReadType<'a, R> for SourceFile {
     type Output = Self;
-    fn read(
-        reader: &mut Reader<'_, R>,
-        _constants: &[Constant],
-        index: ConstantIndex,
-    ) -> Result<Self::Output> {
+    type Context = ReadIndexContext<'a>;
+    fn read(reader: &mut Reader<'_, R>, context: &Self::Context) -> Result<Self::Output> {
         Ok(Self {
-            attribute_name: index,
-            source_file: ConstantIndex::read(reader)?,
+            attribute_name: context.index,
+            source_file: ConstantIndex::read(reader, &NullContext)?,
         })
     }
 }
@@ -164,13 +172,10 @@ pub struct InnerClasses {
     pub classes: Vec<InnerClassInfo>,
 }
 
-impl<R: Read> ReadTypeContextIndexed<R> for InnerClasses {
+impl<'a, R: Read> ReadType<'a, R> for InnerClasses {
     type Output = Self;
-    fn read(
-        _reader: &mut Reader<'_, R>,
-        _constants: &[Constant],
-        _index: ConstantIndex,
-    ) -> Result<Self::Output> {
+    type Context = ReadIndexContext<'a>;
+    fn read(_reader: &mut Reader<'_, R>, _context: &Self::Context) -> Result<Self::Output> {
         unimplemented!()
     }
 }
@@ -182,13 +187,10 @@ pub struct EnclosingMethod {
     pub method: ConstantIndex,
 }
 
-impl<R: Read> ReadTypeContextIndexed<R> for EnclosingMethod {
+impl<'a, R: Read> ReadType<'a, R> for EnclosingMethod {
     type Output = Self;
-    fn read(
-        _reader: &mut Reader<'_, R>,
-        _constants: &[Constant],
-        _index: ConstantIndex,
-    ) -> Result<Self::Output> {
+    type Context = ReadIndexContext<'a>;
+    fn read(_reader: &mut Reader<'_, R>, _context: &Self::Context) -> Result<Self::Output> {
         unimplemented!()
     }
 }
@@ -199,13 +201,10 @@ pub struct SourceDebugExtension {
     pub debug_extension: Vec<u8>,
 }
 
-impl<R: Read> ReadTypeContextIndexed<R> for SourceDebugExtension {
+impl<'a, R: Read> ReadType<'a, R> for SourceDebugExtension {
     type Output = Self;
-    fn read(
-        _reader: &mut Reader<'_, R>,
-        _constants: &[Constant],
-        _index: ConstantIndex,
-    ) -> Result<Self::Output> {
+    type Context = ReadIndexContext<'a>;
+    fn read(_reader: &mut Reader<'_, R>, _context: &Self::Context) -> Result<Self::Output> {
         unimplemented!()
     }
 }
@@ -216,16 +215,13 @@ pub struct ConstantValue {
     pub constant_value: ConstantIndex,
 }
 
-impl<R: Read> ReadTypeContextIndexed<R> for ConstantValue {
+impl<'a, R: Read> ReadType<'a, R> for ConstantValue {
     type Output = Self;
-    fn read(
-        reader: &mut Reader<'_, R>,
-        _constants: &[Constant],
-        index: ConstantIndex,
-    ) -> Result<Self::Output> {
+    type Context = ReadIndexContext<'a>;
+    fn read(reader: &mut Reader<'_, R>, context: &Self::Context) -> Result<Self::Output> {
         Ok(Self {
-            attribute_name: index,
-            constant_value: ConstantIndex::read(reader)?,
+            attribute_name: context.index,
+            constant_value: ConstantIndex::read(reader, &NullContext)?,
         })
     }
 }
@@ -236,18 +232,15 @@ pub struct Exceptions {
     pub index_table: Vec<ConstantIndex>,
 }
 
-impl<R: Read> ReadTypeContextIndexed<R> for Exceptions {
+impl<'a, R: Read> ReadType<'a, R> for Exceptions {
     type Output = Self;
-    fn read(
-        reader: &mut Reader<'_, R>,
-        _constants: &[Constant],
-        index: ConstantIndex,
-    ) -> Result<Self::Output> {
+    type Context = ReadIndexContext<'a>;
+    fn read(reader: &mut Reader<'_, R>, context: &Self::Context) -> Result<Self::Output> {
         Ok(Self {
-            attribute_name: index,
+            attribute_name: context.index,
             index_table: reader.read_many(
                 |reader| reader.read_u16("exceptions length"),
-                ConstantIndex::read,
+                |reader| ConstantIndex::read(reader, &NullContext),
             )?,
         })
     }
@@ -259,13 +252,10 @@ pub struct BootstrapMethods {
     pub methods: Vec<BootstrapMethods>,
 }
 
-impl<R: Read> ReadTypeContextIndexed<R> for BootstrapMethods {
+impl<'a, R: Read> ReadType<'a, R> for BootstrapMethods {
     type Output = Self;
-    fn read(
-        _reader: &mut Reader<'_, R>,
-        _constants: &[Constant],
-        _index: ConstantIndex,
-    ) -> Result<Self::Output> {
+    type Context = ReadIndexContext<'a>;
+    fn read(_reader: &mut Reader<'_, R>, _context: &Self::Context) -> Result<Self::Output> {
         unimplemented!()
     }
 }
@@ -276,13 +266,10 @@ pub struct AnnotationDefault {
     pub value: ElementValue,
 }
 
-impl<R: Read> ReadTypeContextIndexed<R> for AnnotationDefault {
+impl<'a, R: Read> ReadType<'a, R> for AnnotationDefault {
     type Output = Self;
-    fn read(
-        _reader: &mut Reader<'_, R>,
-        _constants: &[Constant],
-        _index: ConstantIndex,
-    ) -> Result<Self::Output> {
+    type Context = ReadIndexContext<'a>;
+    fn read(_reader: &mut Reader<'_, R>, _context: &Self::Context) -> Result<Self::Output> {
         unimplemented!()
     }
 }
@@ -292,13 +279,10 @@ pub struct MethodParameters {
     pub attribute_name: ConstantIndex,
 }
 
-impl<R: Read> ReadTypeContextIndexed<R> for MethodParameters {
+impl<'a, R: Read> ReadType<'a, R> for MethodParameters {
     type Output = Self;
-    fn read(
-        _reader: &mut Reader<'_, R>,
-        _constants: &[Constant],
-        _index: ConstantIndex,
-    ) -> Result<Self::Output> {
+    type Context = ReadIndexContext<'a>;
+    fn read(_reader: &mut Reader<'_, R>, _context: &Self::Context) -> Result<Self::Output> {
         unimplemented!()
     }
 }
@@ -308,13 +292,10 @@ pub struct Synthetic {
     pub attribute_name: ConstantIndex,
 }
 
-impl<R: Read> ReadTypeContextIndexed<R> for Synthetic {
+impl<'a, R: Read> ReadType<'a, R> for Synthetic {
     type Output = Self;
-    fn read(
-        _reader: &mut Reader<'_, R>,
-        _constants: &[Constant],
-        _index: ConstantIndex,
-    ) -> Result<Self::Output> {
+    type Context = ReadIndexContext<'a>;
+    fn read(_reader: &mut Reader<'_, R>, _context: &Self::Context) -> Result<Self::Output> {
         unimplemented!()
     }
 }
@@ -324,13 +305,10 @@ pub struct Deprecated {
     pub attribute_name: ConstantIndex,
 }
 
-impl<R: Read> ReadTypeContextIndexed<R> for Deprecated {
+impl<'a, R: Read> ReadType<'a, R> for Deprecated {
     type Output = Self;
-    fn read(
-        _reader: &mut Reader<'_, R>,
-        _constants: &[Constant],
-        _index: ConstantIndex,
-    ) -> Result<Self::Output> {
+    type Context = ReadIndexContext<'a>;
+    fn read(_reader: &mut Reader<'_, R>, _context: &Self::Context) -> Result<Self::Output> {
         unimplemented!()
     }
 }
@@ -341,13 +319,10 @@ pub struct Signature {
     pub signature: ConstantIndex,
 }
 
-impl<R: Read> ReadTypeContextIndexed<R> for Signature {
+impl<'a, R: Read> ReadType<'a, R> for Signature {
     type Output = Self;
-    fn read(
-        _reader: &mut Reader<'_, R>,
-        _constants: &[Constant],
-        _index: ConstantIndex,
-    ) -> Result<Self::Output> {
+    type Context = ReadIndexContext<'a>;
+    fn read(_reader: &mut Reader<'_, R>, _context: &Self::Context) -> Result<Self::Output> {
         unimplemented!()
     }
 }
@@ -358,13 +333,10 @@ pub struct RuntimeVisibleAnnotations {
     pub annotations: Vec<Annotation>,
 }
 
-impl<R: Read> ReadTypeContextIndexed<R> for RuntimeVisibleAnnotations {
+impl<'a, R: Read> ReadType<'a, R> for RuntimeVisibleAnnotations {
     type Output = Self;
-    fn read(
-        _reader: &mut Reader<'_, R>,
-        _constants: &[Constant],
-        _index: ConstantIndex,
-    ) -> Result<Self::Output> {
+    type Context = ReadIndexContext<'a>;
+    fn read(_reader: &mut Reader<'_, R>, _context: &Self::Context) -> Result<Self::Output> {
         unimplemented!()
     }
 }
@@ -375,13 +347,10 @@ pub struct RuntimeInvisibleAnnotations {
     pub annotations: Vec<Annotation>,
 }
 
-impl<R: Read> ReadTypeContextIndexed<R> for RuntimeInvisibleAnnotations {
+impl<'a, R: Read> ReadType<'a, R> for RuntimeInvisibleAnnotations {
     type Output = Self;
-    fn read(
-        _reader: &mut Reader<'_, R>,
-        _constants: &[Constant],
-        _index: ConstantIndex,
-    ) -> Result<Self::Output> {
+    type Context = ReadIndexContext<'a>;
+    fn read(_reader: &mut Reader<'_, R>, _context: &Self::Context) -> Result<Self::Output> {
         unimplemented!()
     }
 }
@@ -392,15 +361,12 @@ pub struct LineNumberTable {
     pub table: Vec<(u16, u16)>,
 }
 
-impl<R: Read> ReadTypeContextIndexed<R> for LineNumberTable {
+impl<'a, R: Read> ReadType<'a, R> for LineNumberTable {
     type Output = Self;
-    fn read(
-        reader: &mut Reader<'_, R>,
-        _constants: &[Constant],
-        index: ConstantIndex,
-    ) -> Result<Self::Output> {
+    type Context = ReadIndexContext<'a>;
+    fn read(reader: &mut Reader<'_, R>, context: &Self::Context) -> Result<Self::Output> {
         Ok(Self {
-            attribute_name: index,
+            attribute_name: context.index,
             table: reader.read_many(
                 |reader| reader.read_u16("line_number_table length"),
                 |reader| {
@@ -419,13 +385,10 @@ pub struct LocalVariableTable {
     pub variables: Vec<LocalVariable>,
 }
 
-impl<R: Read> ReadTypeContextIndexed<R> for LocalVariableTable {
+impl<'a, R: Read> ReadType<'a, R> for LocalVariableTable {
     type Output = Self;
-    fn read(
-        _reader: &mut Reader<'_, R>,
-        _constants: &[Constant],
-        _index: ConstantIndex,
-    ) -> Result<Self::Output> {
+    type Context = ReadIndexContext<'a>;
+    fn read(_reader: &mut Reader<'_, R>, _context: &Self::Context) -> Result<Self::Output> {
         unimplemented!()
     }
 }
@@ -439,13 +402,10 @@ pub struct LocalVariable {
     pub index: u16,
 }
 
-impl<R: Read> ReadTypeContextIndexed<R> for LocalVariable {
+impl<'a, R: Read> ReadType<'a, R> for LocalVariable {
     type Output = Self;
-    fn read(
-        _reader: &mut Reader<'_, R>,
-        _constants: &[Constant],
-        _index: ConstantIndex,
-    ) -> Result<Self::Output> {
+    type Context = ReadIndexContext<'a>;
+    fn read(_reader: &mut Reader<'_, R>, _context: &Self::Context) -> Result<Self::Output> {
         unimplemented!()
     }
 }
@@ -456,13 +416,10 @@ pub struct LocalVariableTypeTable {
     pub variables_types: Vec<LocalVariableType>,
 }
 
-impl<R: Read> ReadTypeContextIndexed<R> for LocalVariableTypeTable {
+impl<'a, R: Read> ReadType<'a, R> for LocalVariableTypeTable {
     type Output = Self;
-    fn read(
-        _reader: &mut Reader<'_, R>,
-        _constants: &[Constant],
-        _index: ConstantIndex,
-    ) -> Result<Self::Output> {
+    type Context = ReadIndexContext<'a>;
+    fn read(_reader: &mut Reader<'_, R>, _context: &Self::Context) -> Result<Self::Output> {
         unimplemented!()
     }
 }
@@ -476,13 +433,10 @@ pub struct LocalVariableType {
     pub index: u16,
 }
 
-impl<R: Read> ReadTypeContextIndexed<R> for LocalVariableType {
+impl<'a, R: Read> ReadType<'a, R> for LocalVariableType {
     type Output = Self;
-    fn read(
-        _reader: &mut Reader<'_, R>,
-        _constants: &[Constant],
-        _index: ConstantIndex,
-    ) -> Result<Self::Output> {
+    type Context = ReadIndexContext<'a>;
+    fn read(_reader: &mut Reader<'_, R>, _context: &Self::Context) -> Result<Self::Output> {
         unimplemented!()
     }
 }
@@ -493,18 +447,15 @@ pub struct StackMapTable {
     pub entries: Vec<StackMapFrame>,
 }
 
-impl<R: Read> ReadTypeContextIndexed<R> for StackMapTable {
+impl<'a, R: Read> ReadType<'a, R> for StackMapTable {
     type Output = Self;
-    fn read(
-        reader: &mut Reader<'_, R>,
-        _constants: &[Constant],
-        index: ConstantIndex,
-    ) -> Result<Self::Output> {
+    type Context = ReadIndexContext<'a>;
+    fn read(reader: &mut Reader<'_, R>, context: &Self::Context) -> Result<Self::Output> {
         Ok(StackMapTable {
-            attribute_name: index,
+            attribute_name: context.index,
             entries: reader.read_many(
                 |reader| reader.read_u16("stack_map_table length"),
-                |reader| StackMapFrame::read(reader),
+                |reader| StackMapFrame::read(reader, context),
             )?,
         })
     }
@@ -516,13 +467,10 @@ pub struct RuntimeVisibleTypeAnnotations {
     pub annotations: Vec<Annotation>,
 }
 
-impl<R: Read> ReadTypeContextIndexed<R> for RuntimeVisibleTypeAnnotations {
+impl<'a, R: Read> ReadType<'a, R> for RuntimeVisibleTypeAnnotations {
     type Output = Self;
-    fn read(
-        _reader: &mut Reader<'_, R>,
-        _constants: &[Constant],
-        _index: ConstantIndex,
-    ) -> Result<Self::Output> {
+    type Context = ReadIndexContext<'a>;
+    fn read(_reader: &mut Reader<'_, R>, _context: &Self::Context) -> Result<Self::Output> {
         unimplemented!()
     }
 }
@@ -533,13 +481,10 @@ pub struct RuntimeInvisibleTypeAnnotations {
     pub annotations: Vec<Annotation>,
 }
 
-impl<R: Read> ReadTypeContextIndexed<R> for RuntimeInvisibleTypeAnnotations {
+impl<'a, R: Read> ReadType<'a, R> for RuntimeInvisibleTypeAnnotations {
     type Output = Self;
-    fn read(
-        _reader: &mut Reader<'_, R>,
-        _constants: &[Constant],
-        _index: ConstantIndex,
-    ) -> Result<Self::Output> {
+    type Context = ReadIndexContext<'a>;
+    fn read(_reader: &mut Reader<'_, R>, _context: &Self::Context) -> Result<Self::Output> {
         unimplemented!()
     }
 }
@@ -550,13 +495,10 @@ pub struct Annotation {
     pub indices_with_values: Vec<(ConstantIndex, ElementValue)>,
 }
 
-impl<R: Read> ReadTypeContextIndexed<R> for Annotation {
+impl<'a, R: Read> ReadType<'a, R> for Annotation {
     type Output = Self;
-    fn read(
-        _reader: &mut Reader<'_, R>,
-        _constants: &[Constant],
-        _index: ConstantIndex,
-    ) -> Result<Self::Output> {
+    type Context = ReadIndexContext<'a>;
+    fn read(_reader: &mut Reader<'_, R>, _context: &Self::Context) -> Result<Self::Output> {
         unimplemented!()
     }
 }
@@ -567,13 +509,10 @@ pub struct RuntimeVisibleParameterAnnotations {
     pub annotations_by_param_index: Vec<ParameterAnnotation>,
 }
 
-impl<R: Read> ReadTypeContextIndexed<R> for RuntimeVisibleParameterAnnotations {
+impl<'a, R: Read> ReadType<'a, R> for RuntimeVisibleParameterAnnotations {
     type Output = Self;
-    fn read(
-        _reader: &mut Reader<'_, R>,
-        _constants: &[Constant],
-        _index: ConstantIndex,
-    ) -> Result<Self::Output> {
+    type Context = ReadIndexContext<'a>;
+    fn read(_reader: &mut Reader<'_, R>, _context: &Self::Context) -> Result<Self::Output> {
         unimplemented!()
     }
 }
@@ -584,13 +523,10 @@ pub struct RuntimeInvisibleParameterAnnotations {
     pub annotations_by_param_index: Vec<ParameterAnnotation>,
 }
 
-impl<R: Read> ReadTypeContextIndexed<R> for RuntimeInvisibleParameterAnnotations {
+impl<'a, R: Read> ReadType<'a, R> for RuntimeInvisibleParameterAnnotations {
     type Output = Self;
-    fn read(
-        _reader: &mut Reader<'_, R>,
-        _constants: &[Constant],
-        _index: ConstantIndex,
-    ) -> Result<Self::Output> {
+    type Context = ReadIndexContext<'a>;
+    fn read(_reader: &mut Reader<'_, R>, _context: &Self::Context) -> Result<Self::Output> {
         unimplemented!()
     }
 }
@@ -598,13 +534,10 @@ impl<R: Read> ReadTypeContextIndexed<R> for RuntimeInvisibleParameterAnnotations
 #[derive(PartialEq, Debug, Clone)]
 pub struct ParameterAnnotation(pub Vec<Annotation>);
 
-impl<R: Read> ReadTypeContextIndexed<R> for ParameterAnnotation {
+impl<'a, R: Read> ReadType<'a, R> for ParameterAnnotation {
     type Output = Self;
-    fn read(
-        _reader: &mut Reader<'_, R>,
-        _constants: &[Constant],
-        _index: ConstantIndex,
-    ) -> Result<Self::Output> {
+    type Context = ReadIndexContext<'a>;
+    fn read(_reader: &mut Reader<'_, R>, _context: &Self::Context) -> Result<Self::Output> {
         unimplemented!()
     }
 }
@@ -637,129 +570,200 @@ pub struct ExceptionTableRow {
     pub catch_type: ConstantIndex,
 }
 
-impl<R: Read> ReadType<R> for ExceptionTableRow {
+impl<'a, R: Read> ReadType<'a, R> for ExceptionTableRow {
     type Output = Self;
-    fn read(reader: &mut Reader<'_, R>) -> Result<Self::Output> {
+    type Context = ReadIndexContext<'a>;
+    fn read(reader: &mut Reader<'_, R>, _context: &Self::Context) -> Result<Self::Output> {
         Ok(Self {
             start_pc: reader.read_u16("start_pc")?,
             end_pc: reader.read_u16("end_c")?,
             handler_pc: reader.read_u16("handler_pc")?,
-            catch_type: ConstantIndex::read(reader)?,
+            catch_type: ConstantIndex::read(reader, &NullContext)?,
+        })
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct SameFrame {
+    pub offset: u8,
+}
+
+impl<R: Read> ReadType<'_, R> for SameFrame {
+    type Output = Self;
+    type Context = ReadTypeContext;
+    fn read(_reader: &mut Reader<'_, R>, context: &Self::Context) -> Result<Self::Output> {
+        Ok(Self { offset: context.ty })
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct SameFrameExtended {
+    pub offset: u16,
+}
+
+impl<R: Read> ReadType<'_, R> for SameFrameExtended {
+    type Output = Self;
+    type Context = ReadTypeContext;
+    fn read(reader: &mut Reader<'_, R>, _context: &Self::Context) -> Result<Self::Output> {
+        Ok(Self {
+            offset: reader.read_u16("same_frame_extended")?,
+        })
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct SameLocalsOneStackItemFrame {
+    pub offset: u8,
+    pub stack_item: VerificationType,
+}
+
+impl<R: Read> ReadType<'_, R> for SameLocalsOneStackItemFrame {
+    type Output = Self;
+    type Context = ReadTypeContext;
+    fn read(reader: &mut Reader<'_, R>, context: &Self::Context) -> Result<Self::Output> {
+        Ok(Self {
+            offset: context.ty - 64,
+            stack_item: VerificationType::read(reader, context)?,
+        })
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct SameLocalsOneStackItemFrameExtended {
+    pub offset: u16,
+    pub stack_item: VerificationType,
+}
+
+impl<R: Read> ReadType<'_, R> for SameLocalsOneStackItemFrameExtended {
+    type Output = Self;
+    type Context = ReadTypeContext;
+    fn read(reader: &mut Reader<'_, R>, context: &Self::Context) -> Result<Self::Output> {
+        Ok(Self {
+            offset: reader.read_u16("same_locals_one_stack_item_frame_extended")?,
+            stack_item: VerificationType::read(reader, context)?,
+        })
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct ChopFrame {
+    pub offset: u16,
+    pub absent_locals: u8,
+}
+
+impl<R: Read> ReadType<'_, R> for ChopFrame {
+    type Output = Self;
+    type Context = ReadTypeContext;
+    fn read(reader: &mut Reader<'_, R>, context: &Self::Context) -> Result<Self::Output> {
+        Ok(Self {
+            offset: reader.read_u16("chop_frame")?,
+            absent_locals: (251 - context.ty),
+        })
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct AppendFrame {
+    pub offset: u16,
+    pub new_locals: Vec<VerificationType>,
+}
+
+impl<R: Read> ReadType<'_, R> for AppendFrame {
+    type Output = Self;
+    type Context = ReadTypeContext;
+    fn read(reader: &mut Reader<'_, R>, context: &Self::Context) -> Result<Self::Output> {
+        Ok(Self {
+            offset: reader.read_u16("append_frame")?,
+            new_locals: reader.read_many(
+                |reader| reader.read_u16("num_locals"),
+                |reader| VerificationType::read(reader, context),
+            )?,
+        })
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct FullFrame {
+    pub offset: u16,
+    pub locals: Vec<VerificationType>,
+    pub stack_items: Vec<VerificationType>,
+}
+
+impl<R: Read> ReadType<'_, R> for FullFrame {
+    type Output = Self;
+    type Context = ReadTypeContext;
+    fn read(reader: &mut Reader<'_, R>, context: &Self::Context) -> Result<Self::Output> {
+        Ok(Self {
+            offset: reader.read_u16("full_frame")?,
+            locals: reader.read_many(
+                |reader| reader.read_u16("num_locals"),
+                |reader| VerificationType::read(reader, context),
+            )?,
+            stack_items: reader.read_many(
+                |reader| reader.read_u16("num_stack_items"),
+                |reader| VerificationType::read(reader, context),
+            )?,
         })
     }
 }
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum StackMapFrame {
-    SameFrame {
-        offset: u8,
-    },
-    SameFrameExtended {
-        offset: u16,
-    },
-    SameLocalsOneStackItemFrame {
-        offset: u8,
-        stack_item: VerificationType,
-    },
-    SameLocalsOneStackItemFrameExtended {
-        offset: u16,
-        stack_item: VerificationType,
-    },
-    ChopFrame {
-        offset: u16,
-        absent_locals: u8,
-    },
-    AppendFrame {
-        offset: u16,
-        new_locals: Vec<VerificationType>,
-    },
-    FullFrame {
-        offset: u16,
-        locals: Vec<VerificationType>,
-        stack_items: Vec<VerificationType>,
-    },
+    SameFrame(SameFrame),
+    SameFrameExtended(SameFrameExtended),
+    SameLocalsOneStackItemFrame(SameLocalsOneStackItemFrame),
+    SameLocalsOneStackItemFrameExtended(SameLocalsOneStackItemFrameExtended),
+    ChopFrame(ChopFrame),
+    AppendFrame(AppendFrame),
+    FullFrame(FullFrame),
 }
 
-impl<R: Read> ReadType<R> for StackMapFrame {
+impl<'a, R: Read> ReadType<'a, R> for StackMapFrame {
     type Output = Self;
-    fn read(reader: &mut Reader<'_, R>) -> Result<Self::Output> {
+    type Context = ReadIndexContext<'a>;
+    fn read(reader: &mut Reader<'_, R>, _context: &Self::Context) -> Result<Self::Output> {
         let ty = reader.read_u8("stack_map_frame type")?;
+        let ctx = ReadTypeContext { ty };
+
         match ty {
-            0...63 => Self::same_frame(reader, ty),
-            64...127 => Self::same_locals_one_stack_item_frame(reader, ty),
-            247 => Self::same_locals_one_stack_item_frame_extended(reader, ty),
-            248...250 => Self::chop_frame(reader, ty),
-            251 => Self::same_frame_extended(reader, ty),
-            252...254 => Self::append_frame(reader, ty),
-            255 => Self::full_frame(reader, ty),
+            0...63 => {
+                //
+                SameFrame::read(reader, &ctx).map(StackMapFrame::SameFrame)
+            }
+            64...127 => {
+                //
+                SameLocalsOneStackItemFrame::read(reader, &ctx)
+                    .map(StackMapFrame::SameLocalsOneStackItemFrame)
+            }
+            247 => {
+                //
+                SameLocalsOneStackItemFrameExtended::read(reader, &ctx)
+                    .map(StackMapFrame::SameLocalsOneStackItemFrameExtended)
+            }
+            248...250 => {
+                //
+                ChopFrame::read(reader, &ctx).map(StackMapFrame::ChopFrame)
+            }
+            251 => {
+                //
+                SameFrameExtended::read(reader, &ctx).map(StackMapFrame::SameFrameExtended)
+            }
+            252...254 => {
+                //
+                AppendFrame::read(reader, &ctx).map(StackMapFrame::AppendFrame)
+            }
+            255 => {
+                //
+                FullFrame::read(reader, &ctx).map(StackMapFrame::FullFrame)
+            }
             _ => Err(Error::InvalidStackFrameType(ty)),
         }
     }
 }
 
-impl StackMapFrame {
-    fn same_frame<R: Read>(_: &mut Reader<'_, R>, ty: u8) -> Result<Self> {
-        Ok(StackMapFrame::SameFrame { offset: ty })
-    }
-
-    fn same_frame_extended<R: Read>(reader: &mut Reader<'_, R>, _: u8) -> Result<Self> {
-        Ok(StackMapFrame::SameFrameExtended {
-            offset: reader.read_u16("same_frame_extended")?,
-        })
-    }
-
-    fn same_locals_one_stack_item_frame<R: Read>(
-        reader: &mut Reader<'_, R>,
-        ty: u8,
-    ) -> Result<Self> {
-        Ok(StackMapFrame::SameLocalsOneStackItemFrame {
-            offset: ty - 64,
-            stack_item: VerificationType::read(reader)?,
-        })
-    }
-
-    fn same_locals_one_stack_item_frame_extended<R: Read>(
-        reader: &mut Reader<'_, R>,
-        _: u8,
-    ) -> Result<Self> {
-        Ok(StackMapFrame::SameLocalsOneStackItemFrameExtended {
-            offset: reader.read_u16("same_locals_one_stack_item_frame_extended")?,
-            stack_item: VerificationType::read(reader)?,
-        })
-    }
-
-    fn chop_frame<R: Read>(reader: &mut Reader<'_, R>, ty: u8) -> Result<Self> {
-        Ok(StackMapFrame::ChopFrame {
-            offset: reader.read_u16("chop_frame")?,
-            absent_locals: (251 - ty),
-        })
-    }
-
-    fn append_frame<R: Read>(reader: &mut Reader<'_, R>, _: u8) -> Result<Self> {
-        let offset = reader.read_u16("append_frame")?;
-        let new_locals = reader.read_many(
-            |reader| reader.read_u16("num_locals"),
-            VerificationType::read,
-        )?;
-        Ok(StackMapFrame::AppendFrame { offset, new_locals })
-    }
-
-    fn full_frame<R: Read>(reader: &mut Reader<'_, R>, _: u8) -> Result<Self> {
-        let offset = reader.read_u16("full_frame")?;
-        let locals = reader.read_many(
-            |reader| reader.read_u16("num_locals"),
-            VerificationType::read,
-        )?;
-        let stack_items = reader.read_many(
-            |reader| reader.read_u16("num_stack_items"),
-            VerificationType::read,
-        )?;
-        Ok(StackMapFrame::FullFrame {
-            offset,
-            locals,
-            stack_items,
-        })
-    }
+#[derive(Copy, Clone, Debug)]
+pub struct ReadTypeContext {
+    ty: u8,
 }
 
 #[derive(PartialEq, Debug, Clone, PartialOrd)]
@@ -775,9 +779,10 @@ pub enum VerificationType {
     Uninitialized(u16),
 }
 
-impl<R: Read> ReadType<R> for VerificationType {
+impl<R: Read> ReadType<'_, R> for VerificationType {
     type Output = Self;
-    fn read(reader: &mut Reader<'_, R>) -> Result<Self::Output> {
+    type Context = ReadTypeContext;
+    fn read(reader: &mut Reader<'_, R>, _context: &Self::Context) -> Result<Self::Output> {
         use VerificationType::*;
         match reader.read_u8("verification_type")? {
             0 => Ok(Top),
@@ -787,7 +792,7 @@ impl<R: Read> ReadType<R> for VerificationType {
             4 => Ok(Double),
             5 => Ok(Null),
             6 => Ok(UninitializedThis),
-            7 => ConstantIndex::read(reader).map(Object),
+            7 => ConstantIndex::read(reader, &NullContext).map(Object),
             8 => reader.read_u16("uninitialized").map(Uninitialized),
             e => Err(Error::InvalidVerificationType(e)),
         }

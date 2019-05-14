@@ -8,18 +8,19 @@ pub struct Field {
     pub attributes: Vec<Attribute>,
 }
 
-impl<R: Read> ReadTypeContext<R> for Field {
+impl<'a, R: Read> ReadType<'a, R> for Field {
     type Output = Self;
-    fn read(reader: &mut Reader<'_, R>, constants: &[Constant]) -> Result<Self> {
+    type Context = ReadContext<'a>;
+    fn read(reader: &mut Reader<'_, R>, context: &Self::Context) -> Result<Self> {
         let flags = reader
             .read_u16("field_flags")
             .map(FieldFlags::from_bits)?
             .expect("valid field_flags");
-        let name = ConstantIndex::read(reader)?;
-        let descriptor = ConstantIndex::read(reader)?;
+        let name = ConstantIndex::read(reader, &NullContext)?;
+        let descriptor = ConstantIndex::read(reader, &NullContext)?;
         let attributes = reader.read_many(
             |reader| reader.read_u16("attributes length"),
-            |reader| Attribute::read(reader, constants),
+            |reader| Attribute::read(reader, context),
         )?;
         Ok(Self {
             flags,

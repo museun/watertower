@@ -8,18 +8,19 @@ pub struct Method {
     pub attributes: Vec<Attribute>,
 }
 
-impl<R: Read> ReadTypeContext<R> for Method {
+impl<'a, R: Read> ReadType<'a, R> for Method {
     type Output = Self;
-    fn read(reader: &mut Reader<'_, R>, constants: &[Constant]) -> Result<Self> {
+    type Context = ReadContext<'a>;
+    fn read(reader: &mut Reader<'_, R>, context: &Self::Context) -> Result<Self> {
         let flags = reader
             .read_u16("access_flags")
             .map(MethodFlags::from_bits)?
             .expect("valid method flags");
-        let name = ConstantIndex::read(reader)?;
-        let descriptor = ConstantIndex::read(reader)?;
+        let name = ConstantIndex::read(reader, &NullContext)?;
+        let descriptor = ConstantIndex::read(reader, &NullContext)?;
         let attributes = reader.read_many(
             |reader| reader.read_u16("attributes_count"), //
-            |reader| Attribute::read(reader, constants),
+            |reader| Attribute::read(reader, &context),
         )?;
         Ok(Self {
             flags,
@@ -33,9 +34,10 @@ impl<R: Read> ReadTypeContext<R> for Method {
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
 pub struct MethodIndex(pub u16);
 
-impl<R: Read> ReadType<R> for MethodIndex {
+impl<R: Read> ReadType<'_, R> for MethodIndex {
     type Output = Self;
-    fn read(reader: &mut Reader<'_, R>) -> Result<Self::Output> {
+    type Context = NullContext;
+    fn read(reader: &mut Reader<'_, R>, _context: &Self::Context) -> Result<Self::Output> {
         reader.read_u16("method index").map(Self)
     }
 }

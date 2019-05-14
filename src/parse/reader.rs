@@ -2,24 +2,18 @@ use byteorder::{ReadBytesExt, BE};
 
 use super::*;
 
-pub trait ReadType<R> {
+pub trait ReadType<'a, R> {
     type Output;
-    fn read(reader: &mut Reader<'_, R>) -> Result<Self::Output>;
+    type Context;
+    fn read(reader: &mut Reader<'_, R>, context: &'a Self::Context) -> Result<Self::Output>;
 }
 
-pub trait ReadTypeContext<R> {
-    type Output;
-    fn read(reader: &mut Reader<'_, R>, constants: &[Constant]) -> Result<Self::Output>;
+pub struct ReadContext<'a> {
+    pub constants: &'a [Constant],
 }
 
-pub trait ReadTypeContextIndexed<R> {
-    type Output;
-    fn read(
-        reader: &mut Reader<'_, R>,
-        constants: &[Constant],
-        index: ConstantIndex,
-    ) -> Result<Self::Output>;
-}
+#[derive(Copy, Clone)]
+pub struct NullContext;
 
 pub struct Reader<'a, R> {
     source: &'a mut R,

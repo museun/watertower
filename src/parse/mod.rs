@@ -7,7 +7,7 @@ pub use reader::Reader;
 
 use bitflags::bitflags;
 use error::Result;
-use reader::{ReadType, ReadTypeContext, ReadTypeContextIndexed};
+use reader::{NullContext, ReadContext, ReadType};
 use std::io::Read;
 
 mod attribute;

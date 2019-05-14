@@ -3,9 +3,10 @@ use super::*;
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
 pub struct ConstantIndex(pub u16);
 
-impl<R: Read> ReadType<R> for ConstantIndex {
+impl<R: Read> ReadType<'_, R> for ConstantIndex {
     type Output = Self;
-    fn read(reader: &mut Reader<'_, R>) -> Result<Self::Output> {
+    type Context = NullContext;
+    fn read(reader: &mut Reader<'_, R>, _context: &Self::Context) -> Result<Self::Output> {
         reader.read_u16("constant index").map(Self)
     }
 }
@@ -69,9 +70,10 @@ pub enum Constant {
     Padding,
 }
 
-impl<R: Read> ReadType<R> for Constant {
+impl<R: Read> ReadType<'_, R> for Constant {
     type Output = Self;
-    fn read(reader: &mut Reader<'_, R>) -> Result<Self> {
+    type Context = NullContext;
+    fn read(reader: &mut Reader<'_, R>, _context: &Self::Context) -> Result<Self> {
         match reader.read_u8("tag")? {
             1 => Self::utf8(reader),
             3 => Self::integer(reader),
@@ -146,50 +148,50 @@ impl Constant {
 
     #[inline]
     pub(super) fn class_ref<R: Read>(reader: &mut Reader<'_, R>) -> Result<Self> {
-        ConstantIndex::read(reader).map(Constant::ClassRef)
+        ConstantIndex::read(reader, &NullContext).map(Constant::ClassRef)
     }
 
     #[inline]
     pub(super) fn string_ref<R: Read>(reader: &mut Reader<'_, R>) -> Result<Self> {
-        ConstantIndex::read(reader).map(Constant::StringRef)
+        ConstantIndex::read(reader, &NullContext).map(Constant::StringRef)
     }
 
     #[inline]
     pub(super) fn field_ref<R: Read>(reader: &mut Reader<'_, R>) -> Result<Self> {
         Ok(Constant::FieldRef {
-            class: ConstantIndex::read(reader)?,
-            name_and_type: ConstantIndex::read(reader)?,
+            class: ConstantIndex::read(reader, &NullContext)?,
+            name_and_type: ConstantIndex::read(reader, &NullContext)?,
         })
     }
 
     #[inline]
     pub(super) fn method_ref<R: Read>(reader: &mut Reader<'_, R>) -> Result<Self> {
         Ok(Constant::MethodRef {
-            class: ConstantIndex::read(reader)?,
-            name_and_type: ConstantIndex::read(reader)?,
+            class: ConstantIndex::read(reader, &NullContext)?,
+            name_and_type: ConstantIndex::read(reader, &NullContext)?,
         })
     }
 
     #[inline]
     pub(super) fn interface_method_ref<R: Read>(reader: &mut Reader<'_, R>) -> Result<Self> {
         Ok(Constant::InterfaceMethodRef {
-            class: ConstantIndex::read(reader)?,
-            name_and_type: ConstantIndex::read(reader)?,
+            class: ConstantIndex::read(reader, &NullContext)?,
+            name_and_type: ConstantIndex::read(reader, &NullContext)?,
         })
     }
 
     #[inline]
     pub(super) fn name_and_type_ref<R: Read>(reader: &mut Reader<'_, R>) -> Result<Self> {
         Ok(Constant::NameAndTypeRef {
-            name: ConstantIndex::read(reader)?,
-            descriptor: ConstantIndex::read(reader)?,
+            name: ConstantIndex::read(reader, &NullContext)?,
+            descriptor: ConstantIndex::read(reader, &NullContext)?,
         })
     }
 
     #[inline]
     pub(super) fn method_handle_ref<R: Read>(reader: &mut Reader<'_, R>) -> Result<Self> {
         let kind = reader.read_u8("method handle ref kind")?;
-        let index = ConstantIndex::read(reader)?;
+        let index = ConstantIndex::read(reader, &NullContext)?;
         let handle = match kind {
             1 => MethodHandle::GetField(index),
             2 => MethodHandle::GetStatic(index),
@@ -208,14 +210,14 @@ impl Constant {
 
     #[inline]
     pub(super) fn method_type<R: Read>(reader: &mut Reader<'_, R>) -> Result<Self> {
-        ConstantIndex::read(reader).map(Constant::MethodType)
+        ConstantIndex::read(reader, &NullContext).map(Constant::MethodType)
     }
 
     #[inline]
     pub(super) fn invoke_dynamic_ref<R: Read>(reader: &mut Reader<'_, R>) -> Result<Self> {
         Ok(Constant::InvokeDynamicRef {
-            bootstrap: MethodIndex::read(reader)?,
-            name_and_type: ConstantIndex::read(reader)?,
+            bootstrap: MethodIndex::read(reader, &NullContext)?,
+            name_and_type: ConstantIndex::read(reader, &NullContext)?,
         })
     }
 }

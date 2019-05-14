@@ -54,7 +54,7 @@ impl ClassFile {
 
         let constant_pool = reader.read_many(
             |reader| reader.read_u16("constant_pool_count").map(|d| d - 1),
-            Constant::read,
+            |reader| Constant::read(reader, &NullContext),
         )?;
 
         let flags = reader
@@ -67,22 +67,26 @@ impl ClassFile {
 
         let interfaces = reader.read_many(
             |reader| reader.read_u16("interfaces_count"), //
-            ConstantIndex::read,
+            |reader| ConstantIndex::read(reader, &NullContext),
         )?;
+
+        let ctx = ReadContext {
+            constants: constant_pool.as_slice(),
+        };
 
         let fields = reader.read_many(
             |reader| reader.read_u16("fields_count"), //
-            |reader| Field::read(reader, constant_pool.as_slice()),
+            |reader| Field::read(reader, &ctx),
         )?;
 
         let methods = reader.read_many(
             |reader| reader.read_u16("methods_count"), //
-            |reader| Method::read(reader, constant_pool.as_slice()),
+            |reader| Method::read(reader, &ctx),
         )?;
 
         let attributes = reader.read_many(
             |reader| reader.read_u16("attributes_count"), //
-            |reader| Attribute::read(reader, constant_pool.as_slice()),
+            |reader| Attribute::read(reader, &ctx),
         )?;
 
         Ok(Self {
