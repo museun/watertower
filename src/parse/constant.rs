@@ -109,8 +109,8 @@ impl Constant {
 
 #[derive(Debug, Clone)]
 pub struct MethodRef {
-    class: ConstantIndex,
-    name_and_type: ConstantIndex,
+    pub class: ConstantIndex,
+    pub name_and_type: ConstantIndex,
 }
 
 impl<R: Read> ReadType<'_, R> for MethodRef {
@@ -126,8 +126,8 @@ impl<R: Read> ReadType<'_, R> for MethodRef {
 
 #[derive(Debug, Clone)]
 pub struct FieldRef {
-    class: ConstantIndex,
-    name_and_type: ConstantIndex,
+    pub class: ConstantIndex,
+    pub name_and_type: ConstantIndex,
 }
 
 impl<R: Read> ReadType<'_, R> for FieldRef {
@@ -143,8 +143,8 @@ impl<R: Read> ReadType<'_, R> for FieldRef {
 
 #[derive(Debug, Clone)]
 pub struct InterfaceMethodRef {
-    class: ConstantIndex,
-    name_and_type: ConstantIndex,
+    pub class: ConstantIndex,
+    pub name_and_type: ConstantIndex,
 }
 
 impl<R: Read> ReadType<'_, R> for InterfaceMethodRef {
@@ -160,8 +160,8 @@ impl<R: Read> ReadType<'_, R> for InterfaceMethodRef {
 
 #[derive(Debug, Clone)]
 pub struct NameAndTypeRef {
-    name: ConstantIndex,
-    descriptor: ConstantIndex,
+    pub name: ConstantIndex,
+    pub descriptor: ConstantIndex,
 }
 
 impl<R: Read> ReadType<'_, R> for NameAndTypeRef {
@@ -177,8 +177,8 @@ impl<R: Read> ReadType<'_, R> for NameAndTypeRef {
 
 #[derive(Debug, Clone)]
 pub struct InvokeDynamicRef {
-    bootstrap: MethodIndex,
-    name_and_type: ConstantIndex,
+    pub bootstrap: MethodIndex,
+    pub name_and_type: ConstantIndex,
 }
 
 impl<R: Read> ReadType<'_, R> for InvokeDynamicRef {

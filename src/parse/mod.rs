@@ -11,17 +11,19 @@ use reader::{NullContext, ReadContext, ReadType};
 use std::io::Read;
 
 pub mod attribute;
+pub mod constant;
 
-mod constant;
 mod field;
 mod method;
 
 use types::*;
 
 pub mod types {
+    #[doc(inline)]
     pub use super::attribute::{self, Attribute};
     pub use super::class::{ClassFile, ClassFlags, InnerClassFlags, InnerClassInfo};
-    pub use super::constant::{Constant, ConstantIndex};
+    #[doc(inline)]
+    pub use super::constant::{self, Constant, ConstantIndex};
     pub use super::field::{Field, FieldFlags};
     pub use super::method::{Method, MethodFlags, MethodHandle, MethodIndex};
 }
