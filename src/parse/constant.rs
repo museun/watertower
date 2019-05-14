@@ -17,11 +17,11 @@ impl ConstantIndex {
         if self.0 == 0 {
             return Err(Error::ZeroIndex);
         } else if pool.len() < self.0 as usize {
-            return Err(Error::OutOfRange(self.0));
+            return Err(Error::OutOfRange { index: self.0 });
         }
         let constant = &pool[(&self.0 - 1) as usize];
         match *constant {
-            Constant::Padding => Err(Error::IndexInsideDoubleWidthConstant(self.0)),
+            Constant::Padding => Err(Error::IndexInsideDoubleWidthConstant { index: self.0 }),
             _ => Ok(constant),
         }
     }
@@ -79,7 +79,7 @@ impl<R: Read> ReadType<'_, R> for Constant {
             15 => read_map!(MethodHandle => MethodHandleRef),
             16 => read_map!(ConstantIndex => MethodType),
             18 => read_map!(InvokeDynamicRef => InvokeDynamicRef),
-            e => Err(Error::UnknownTag(e)),
+            e => Err(Error::UnknownTag { tag: e }),
         }
     }
 }
@@ -199,5 +199,5 @@ fn read_utf8<R: Read>(reader: &mut Reader<'_, R>) -> Result<String> {
     reader.read_exact(&mut buf, "utf-8 string")?;
     std::str::from_utf8(&buf)
         .map(ToString::to_string)
-        .map_err(Error::InvalidString)
+        .map_err(|err| Error::InvalidString { error: err })
 }

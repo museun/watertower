@@ -37,7 +37,11 @@ impl<'a, R: Read> ReadType<'a, R> for Attribute {
 
         let ty = match constant {
             Constant::Utf8(s) => s,
-            _ => return Err(Error::InvalidAttributeType(constant.clone())),
+            _ => {
+                return Err(Error::InvalidAttributeType {
+                    attr: constant.clone(),
+                })
+            }
         };
 
         let start = reader.read_u32("attribute_length")?;
@@ -51,7 +55,7 @@ impl<'a, R: Read> ReadType<'a, R> for Attribute {
                 };
                 match ty.as_str() {
                     $($name => $ident::read(reader, &context).map(Attribute::$ident),)*
-                    _ => Err(Error::UnknownAttributeType(ty.to_string())),
+                    _ => Err(Error::UnknownAttributeType{ attr: ty.to_string() }),
                 }
             }};
         }
@@ -739,7 +743,7 @@ impl<'a, R: Read> ReadType<'a, R> for StackMapFrame {
             251 => read_map!(SameFrameExtended),
             252...254 => read_map!(AppendFrame),
             255 => read_map!(FullFrame),
-            _ => Err(Error::InvalidStackFrameType(ty)),
+            _ => Err(Error::InvalidStackFrameType { ty }),
         }
     }
 }
@@ -777,7 +781,7 @@ impl<R: Read> ReadType<'_, R> for VerificationType {
             6 => Ok(UninitializedThis),
             7 => ConstantIndex::read(reader, &NullContext).map(Object),
             8 => reader.read_u16("uninitialized").map(Uninitialized),
-            e => Err(Error::InvalidVerificationType(e)),
+            ty => Err(Error::InvalidVerificationType { ty }),
         }
     }
 }

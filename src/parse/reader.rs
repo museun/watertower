@@ -45,7 +45,10 @@ impl<'a, R: Read> Reader<'a, R> {
         self.source
             .read_exact(buf)
             .map(|_| self.pos += buf.len())
-            .map_err(|err| Error::Io(msg.to_string(), err))
+            .map_err(|err| Error::Io {
+                msg: msg.to_string(),
+                error: err,
+            })
     }
 
     #[inline]
@@ -56,7 +59,10 @@ impl<'a, R: Read> Reader<'a, R> {
                 self.pos += 8;
                 n
             })
-            .map_err(|err| Error::Io(msg.to_string(), err))
+            .map_err(|err| Error::Io {
+                msg: msg.to_string(),
+                error: err,
+            })
     }
 
     #[inline]
@@ -67,7 +73,10 @@ impl<'a, R: Read> Reader<'a, R> {
                 self.pos += 4;
                 n
             })
-            .map_err(|err| Error::Io(msg.to_string(), err))
+            .map_err(|err| Error::Io {
+                msg: msg.to_string(),
+                error: err,
+            })
     }
 
     #[inline]
@@ -78,7 +87,10 @@ impl<'a, R: Read> Reader<'a, R> {
                 self.pos += 2;
                 n
             })
-            .map_err(|err| Error::Io(msg.to_string(), err))
+            .map_err(|err| Error::Io {
+                msg: msg.to_string(),
+                error: err,
+            })
     }
 
     #[inline]
@@ -89,7 +101,10 @@ impl<'a, R: Read> Reader<'a, R> {
                 self.pos += 1;
                 n
             })
-            .map_err(|err| Error::Io(msg.to_string(), err))
+            .map_err(|err| Error::Io {
+                msg: msg.to_string(),
+                error: err,
+            })
     }
 
     #[inline]
@@ -100,7 +115,10 @@ impl<'a, R: Read> Reader<'a, R> {
                 self.pos += 4;
                 n
             })
-            .map_err(|err| Error::Io(msg.to_string(), err))
+            .map_err(|err| Error::Io {
+                msg: msg.to_string(),
+                error: err,
+            })
     }
 
     #[inline]
@@ -111,7 +129,10 @@ impl<'a, R: Read> Reader<'a, R> {
                 self.pos += 8;
                 n
             })
-            .map_err(|err| Error::Io(msg.to_string(), err))
+            .map_err(|err| Error::Io {
+                msg: msg.to_string(),
+                error: err,
+            })
     }
 
     pub fn read_many<Length, Step, Index, Element>(

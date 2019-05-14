@@ -71,7 +71,7 @@ impl<R: Read> ReadType<'_, R> for MethodHandle {
             7 => MethodHandle::InvokeSpecial(index),
             8 => MethodHandle::NewInvokeSpecial(index),
             9 => MethodHandle::InvokeInterface(index),
-            e => return Err(Error::InvalidMethodHandleKind(e)),
+            e => return Err(Error::InvalidMethodHandleKind { kind: e }),
         };
         Ok(handle)
     }

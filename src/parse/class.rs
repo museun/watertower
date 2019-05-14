@@ -43,10 +43,10 @@ impl ClassFile {
         const MAGIC: u32 = 0xCAFE_BABE;
         let magic = reader.read_u32("magic")?;
         if magic != MAGIC {
-            return Err(Error::Expected(
-                format!("{:#X?}", magic),
-                format!("{:#X?}", MAGIC),
-            ));
+            return Err(Error::Expected {
+                got: format!("{:#X?}", magic),
+                expected: format!("{:#X?}", MAGIC),
+            });
         }
 
         let minor_version = reader.read_u16("minor_version")?;
