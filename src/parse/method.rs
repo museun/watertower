@@ -55,6 +55,28 @@ pub enum MethodHandle {
     InvokeInterface(ConstantIndex),
 }
 
+impl<R: Read> ReadType<'_, R> for MethodHandle {
+    type Output = Self;
+    type Context = NullContext;
+    fn read(reader: &mut Reader<'_, R>, context: &Self::Context) -> Result<Self::Output> {
+        let kind = reader.read_u8("method handle ref kind")?;
+        let index = ConstantIndex::read(reader, context)?;
+        let handle = match kind {
+            1 => MethodHandle::GetField(index),
+            2 => MethodHandle::GetStatic(index),
+            3 => MethodHandle::PutField(index),
+            4 => MethodHandle::PutStatic(index),
+            5 => MethodHandle::InvokeVirtual(index),
+            6 => MethodHandle::InvokeDynamic(index),
+            7 => MethodHandle::InvokeSpecial(index),
+            8 => MethodHandle::NewInvokeSpecial(index),
+            9 => MethodHandle::InvokeInterface(index),
+            e => return Err(Error::InvalidMethodHandleKind(e)),
+        };
+        Ok(handle)
+    }
+}
+
 bitflags! {
     pub struct MethodFlags: u16 {
         const PUBLIC       = 0x0001;
