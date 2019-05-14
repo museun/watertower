@@ -19,7 +19,7 @@ impl std::error::Error for Error {
 pub enum Value {}
 
 pub struct Interpreter {
-    classfile: super::ClassFile,
+    classfile: crate::parse::types::ClassFile,
     pc: usize,
     stack: Vec<Value>,
     sp: usize,
@@ -29,10 +29,10 @@ impl Interpreter {
     pub fn new<'a, R, I>(reader: I) -> Self
     where
         R: std::io::Read + 'a,
-        I: Into<super::Reader<'a, R>>,
+        I: Into<crate::parse::Reader<'a, R>>,
     {
         Self {
-            classfile: super::ClassFile::read(reader) //
+            classfile: crate::parse::types::ClassFile::read(reader) //
                 .expect("valid class file"),
             pc: 0,
             stack: vec![],
@@ -49,13 +49,13 @@ impl Interpreter {
                     .lookup(self.classfile.constant_pool.as_slice())
                     .unwrap()
                 {
-                    super::Constant::Utf8(s) => s,
+                    crate::parse::types::Constant::Utf8(s) => s,
                     _ => unreachable!(),
                 }
             );
 
             for attribute in method.attributes {
-                if let super::Attribute::Code { code, .. } = attribute {
+                if let crate::parse::types::Attribute::Code { code, .. } = attribute {
                     for inst in code {
                         eprintln!("0x{:02X} {:?}", inst, Instruction::lookup(inst).unwrap());
                     }
