@@ -417,12 +417,52 @@ impl<R: Read> ReadTypeContextIndexed<R> for LocalVariableTable {
 }
 
 #[derive(PartialEq, Debug, Clone)]
+pub struct LocalVariable {
+    pub start_pc: u16,
+    pub length: u16,
+    pub name: ConstantIndex,
+    pub descriptor: ConstantIndex,
+    pub index: u16,
+}
+
+impl<R: Read> ReadTypeContextIndexed<R> for LocalVariable {
+    type Output = Self;
+    fn read(
+        _reader: &mut Reader<'_, R>,
+        _constants: &[Constant],
+        _index: ConstantIndex,
+    ) -> Result<Self::Output> {
+        unimplemented!()
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
 pub struct LocalVariableTypeTable {
     pub attribute_name: ConstantIndex,
     pub variables_types: Vec<LocalVariableType>,
 }
 
 impl<R: Read> ReadTypeContextIndexed<R> for LocalVariableTypeTable {
+    type Output = Self;
+    fn read(
+        _reader: &mut Reader<'_, R>,
+        _constants: &[Constant],
+        _index: ConstantIndex,
+    ) -> Result<Self::Output> {
+        unimplemented!()
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct LocalVariableType {
+    pub start_pc: u16,
+    pub length: u16,
+    pub name: ConstantIndex,
+    pub signature: ConstantIndex,
+    pub index: u16,
+}
+
+impl<R: Read> ReadTypeContextIndexed<R> for LocalVariableType {
     type Output = Self;
     fn read(
         _reader: &mut Reader<'_, R>,
@@ -491,6 +531,23 @@ impl<R: Read> ReadTypeContextIndexed<R> for RuntimeInvisibleTypeAnnotations {
 }
 
 #[derive(PartialEq, Debug, Clone)]
+pub struct Annotation {
+    pub type_index: ConstantIndex,
+    pub indices_with_values: Vec<(ConstantIndex, ElementValue)>,
+}
+
+impl<R: Read> ReadTypeContextIndexed<R> for Annotation {
+    type Output = Self;
+    fn read(
+        _reader: &mut Reader<'_, R>,
+        _constants: &[Constant],
+        _index: ConstantIndex,
+    ) -> Result<Self::Output> {
+        unimplemented!()
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
 pub struct RuntimeVisibleParameterAnnotations {
     pub attribute_name: ConstantIndex,
     pub annotations_by_param_index: Vec<ParameterAnnotation>,
@@ -514,6 +571,20 @@ pub struct RuntimeInvisibleParameterAnnotations {
 }
 
 impl<R: Read> ReadTypeContextIndexed<R> for RuntimeInvisibleParameterAnnotations {
+    type Output = Self;
+    fn read(
+        _reader: &mut Reader<'_, R>,
+        _constants: &[Constant],
+        _index: ConstantIndex,
+    ) -> Result<Self::Output> {
+        unimplemented!()
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct ParameterAnnotation(pub Vec<Annotation>);
+
+impl<R: Read> ReadTypeContextIndexed<R> for ParameterAnnotation {
     type Output = Self;
     fn read(
         _reader: &mut Reader<'_, R>,
