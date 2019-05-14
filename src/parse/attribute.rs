@@ -725,37 +725,20 @@ impl<'a, R: Read> ReadType<'a, R> for StackMapFrame {
         let ty = reader.read_u8("stack_map_frame type")?;
         let ctx = ReadTypeContext { ty };
 
+        macro_rules! read_map {
+            ($ident:ident) => {
+                $ident::read(reader, &ctx).map(StackMapFrame::$ident)
+            };
+        }
+
         match ty {
-            0...63 => {
-                //
-                SameFrame::read(reader, &ctx).map(StackMapFrame::SameFrame)
-            }
-            64...127 => {
-                //
-                SameLocalsOneStackItemFrame::read(reader, &ctx)
-                    .map(StackMapFrame::SameLocalsOneStackItemFrame)
-            }
-            247 => {
-                //
-                SameLocalsOneStackItemFrameExtended::read(reader, &ctx)
-                    .map(StackMapFrame::SameLocalsOneStackItemFrameExtended)
-            }
-            248...250 => {
-                //
-                ChopFrame::read(reader, &ctx).map(StackMapFrame::ChopFrame)
-            }
-            251 => {
-                //
-                SameFrameExtended::read(reader, &ctx).map(StackMapFrame::SameFrameExtended)
-            }
-            252...254 => {
-                //
-                AppendFrame::read(reader, &ctx).map(StackMapFrame::AppendFrame)
-            }
-            255 => {
-                //
-                FullFrame::read(reader, &ctx).map(StackMapFrame::FullFrame)
-            }
+            0...63 => read_map!(SameFrame),
+            64...127 => read_map!(SameLocalsOneStackItemFrame),
+            247 => read_map!(SameLocalsOneStackItemFrameExtended),
+            248...250 => read_map!(ChopFrame),
+            251 => read_map!(SameFrameExtended),
+            252...254 => read_map!(AppendFrame),
+            255 => read_map!(FullFrame),
             _ => Err(Error::InvalidStackFrameType(ty)),
         }
     }

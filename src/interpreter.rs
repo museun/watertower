@@ -1,6 +1,9 @@
 #![allow(dead_code)]
 type Result<T> = std::result::Result<T, Error>;
 
+use crate::parse::types as ty;
+use crate::parse::types::attribute as attr;
+
 #[derive(Debug)]
 pub enum Error {}
 
@@ -20,7 +23,7 @@ impl std::error::Error for Error {
 pub enum Value {}
 
 pub struct Interpreter {
-    classfile: crate::parse::types::ClassFile,
+    classfile: ty::ClassFile,
     pc: usize,
     stack: Vec<Value>,
     sp: usize,
@@ -33,7 +36,7 @@ impl Interpreter {
         I: Into<crate::parse::Reader<'a, R>>,
     {
         Self {
-            classfile: crate::parse::types::ClassFile::read(reader) //
+            classfile: ty::ClassFile::read(reader) //
                 .expect("valid class file"),
             pc: 0,
             stack: vec![],
@@ -50,17 +53,13 @@ impl Interpreter {
                     .lookup(self.classfile.constant_pool.as_slice())
                     .unwrap()
                 {
-                    crate::parse::types::Constant::Utf8(s) => s,
+                    ty::Constant::Utf8(s) => s,
                     _ => unreachable!(),
                 }
             );
 
             for attribute in method.attributes {
-                if let crate::parse::types::Attribute::Code(crate::parse::types::Code {
-                    code,
-                    ..
-                }) = attribute
-                {
+                if let ty::Attribute::Code(attr::Code { code, .. }) = attribute {
                     for inst in code {
                         eprintln!("0x{:02X} {:?}", inst, Instruction::lookup(inst).unwrap());
                     }

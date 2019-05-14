@@ -10,7 +10,8 @@ use error::Result;
 use reader::{NullContext, ReadContext, ReadType};
 use std::io::Read;
 
-mod attribute;
+pub mod attribute;
+
 mod constant;
 mod field;
 mod method;
@@ -18,16 +19,7 @@ mod method;
 use types::*;
 
 pub mod types {
-    pub use super::attribute::{
-        Annotation, AnnotationDefault, Attribute, BootstrapMethods, Code, ConstantValue,
-        Deprecated, ElementValue, EnclosingMethod, ExceptionTableRow, Exceptions, InnerClasses,
-        LineNumberTable, LocalVariable, LocalVariableTable, LocalVariableType,
-        LocalVariableTypeTable, MethodParameters, ParameterAnnotation, RuntimeInvisibleAnnotations,
-        RuntimeInvisibleParameterAnnotations, RuntimeInvisibleTypeAnnotations,
-        RuntimeVisibleAnnotations, RuntimeVisibleParameterAnnotations,
-        RuntimeVisibleTypeAnnotations, Signature, SourceDebugExtension, SourceFile, StackMapFrame,
-        StackMapTable, Synthetic, VerificationType,
-    };
+    pub use super::attribute::{self, Attribute};
     pub use super::class::{ClassFile, ClassFlags, InnerClassFlags, InnerClassInfo};
     pub use super::constant::{Constant, ConstantIndex};
     pub use super::field::{Field, FieldFlags};
