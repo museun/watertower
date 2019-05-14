@@ -1,5 +1,31 @@
 use super::*;
 
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
+pub struct ConstantIndex(pub u16);
+
+impl<R: Read> ReadType<R> for ConstantIndex {
+    type Output = Self;
+    fn read(reader: &mut Reader<'_, R>) -> Result<Self::Output> {
+        reader.read_u16("constant index").map(Self)
+    }
+}
+
+impl ConstantIndex {
+    // TODO impl this as Index on &'a [T] where T: Constant
+    pub fn lookup(self, pool: &[Constant]) -> Result<&Constant> {
+        if self.0 == 0 {
+            return Err(Error::ZeroIndex);
+        } else if pool.len() < self.0 as usize {
+            return Err(Error::OutOfRange(self.0));
+        }
+        let constant = &pool[(&self.0 - 1) as usize];
+        match *constant {
+            Constant::Padding => Err(Error::IndexInsideDoubleWidthConstant(self.0)),
+            _ => Ok(constant),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum Constant {
     Integer(u32),
@@ -41,131 +67,6 @@ pub enum Constant {
 
     // for padding
     Padding,
-}
-
-impl Constant {
-    pub fn dump(
-        &self,
-        depth: usize,
-        pool: &[Constant],
-        w: &mut impl std::io::Write,
-    ) -> std::io::Result<()> {
-        let pad = " ".repeat(depth);
-        write!(w, "{}", pad)?;
-
-        match self {
-            Constant::Integer(n) => writeln!(w, "{} : Integer", n),
-            Constant::Float(n) => writeln!(w, "{} : Float", n),
-            Constant::Long(n) => writeln!(w, "{} : Long", n),
-            Constant::Double(n) => writeln!(w, "{} : Double", n),
-            Constant::Utf8(s) => writeln!(w, "'{}' : String", s),
-
-            Constant::ClassRef(index) => {
-                writeln!(w, "ClassRef ->")?;
-                index.lookup(pool).unwrap().dump(depth + 4, pool, w)
-            }
-
-            Constant::StringRef(index) => {
-                writeln!(w, "StringRef ->")?;
-                index.lookup(pool).unwrap().dump(depth + 4, pool, w)
-            }
-
-            Constant::MethodRef {
-                class,
-                name_and_type,
-            } => {
-                writeln!(w, "MethodRef ->")?;
-                class.lookup(pool).unwrap().dump(depth + 4, pool, w)?;
-                name_and_type.lookup(pool).unwrap().dump(depth + 4, pool, w)
-            }
-
-            Constant::FieldRef {
-                class,
-                name_and_type,
-            } => {
-                writeln!(w, "FieldRef ->")?;
-                class.lookup(pool).unwrap().dump(depth + 4, pool, w)?;
-                name_and_type.lookup(pool).unwrap().dump(depth + 4, pool, w)
-            }
-
-            Constant::InterfaceMethodRef {
-                class,
-                name_and_type,
-            } => {
-                writeln!(w, "InterfaceMethodRef ->")?;
-                class.lookup(pool).unwrap().dump(depth + 4, pool, w)?;
-                name_and_type.lookup(pool).unwrap().dump(depth + 4, pool, w)
-            }
-
-            Constant::NameAndTypeRef { name, descriptor } => {
-                writeln!(w, "NameAndTypeRef ->")?;
-                name.lookup(pool).unwrap().dump(depth + 4, pool, w)?;
-                descriptor.lookup(pool).unwrap().dump(depth + 4, pool, w)
-            }
-
-            Constant::MethodType(index) => {
-                writeln!(w, "MethodType ->")?;
-                index.lookup(pool).unwrap().dump(depth + 4, pool, w)
-            }
-
-            Constant::MethodHandleRef(handle) => {
-                writeln!(w, "MethodHandleRef ->")?;
-                let pad = " ".repeat(depth + 4);
-                write!(w, "{}", pad)?;
-                let index = match handle {
-                    MethodHandle::GetField(index) => {
-                        writeln!(w, "GetField ->")?;
-                        index
-                    }
-                    MethodHandle::GetStatic(index) => {
-                        writeln!(w, "GetStatic ->")?;
-                        index
-                    }
-                    MethodHandle::PutField(index) => {
-                        writeln!(w, "PutField ->")?;
-                        index
-                    }
-                    MethodHandle::PutStatic(index) => {
-                        writeln!(w, "PutStatic ->")?;
-                        index
-                    }
-                    MethodHandle::InvokeVirtual(index) => {
-                        writeln!(w, "InvokeVirtual ->")?;
-                        index
-                    }
-                    MethodHandle::InvokeDynamic(index) => {
-                        writeln!(w, "InvokeDynamic ->")?;
-                        index
-                    }
-                    MethodHandle::InvokeSpecial(index) => {
-                        writeln!(w, "InvokeSpecial ->")?;
-                        index
-                    }
-                    MethodHandle::NewInvokeSpecial(index) => {
-                        writeln!(w, "NewInvokeSpecial ->")?;
-                        index
-                    }
-                    MethodHandle::InvokeInterface(index) => {
-                        writeln!(w, "InvokeInterface ->")?;
-                        index
-                    }
-                };
-
-                index.lookup(pool).unwrap().dump(depth + 8, pool, w)
-            }
-
-            Constant::InvokeDynamicRef {
-                bootstrap,
-                name_and_type,
-            } => {
-                writeln!(w, "InvokeDynamicRef ->")?;
-                pool[bootstrap.0 as usize - 1].dump(depth + 4, pool, w)?;
-                name_and_type.lookup(pool).unwrap().dump(depth + 4, pool, w)
-            }
-
-            Constant::Padding => Ok(()),
-        }
-    }
 }
 
 impl<R: Read> ReadType<R> for Constant {
@@ -316,5 +217,130 @@ impl Constant {
             bootstrap: MethodIndex::read(reader)?,
             name_and_type: ConstantIndex::read(reader)?,
         })
+    }
+}
+
+impl Constant {
+    pub fn dump(
+        &self,
+        depth: usize,
+        pool: &[Constant],
+        w: &mut impl std::io::Write,
+    ) -> std::io::Result<()> {
+        let pad = " ".repeat(depth);
+        write!(w, "{}", pad)?;
+
+        match self {
+            Constant::Integer(n) => writeln!(w, "{} : Integer", n),
+            Constant::Float(n) => writeln!(w, "{} : Float", n),
+            Constant::Long(n) => writeln!(w, "{} : Long", n),
+            Constant::Double(n) => writeln!(w, "{} : Double", n),
+            Constant::Utf8(s) => writeln!(w, "'{}' : String", s),
+
+            Constant::ClassRef(index) => {
+                writeln!(w, "ClassRef ->")?;
+                index.lookup(pool).unwrap().dump(depth + 4, pool, w)
+            }
+
+            Constant::StringRef(index) => {
+                writeln!(w, "StringRef ->")?;
+                index.lookup(pool).unwrap().dump(depth + 4, pool, w)
+            }
+
+            Constant::MethodRef {
+                class,
+                name_and_type,
+            } => {
+                writeln!(w, "MethodRef ->")?;
+                class.lookup(pool).unwrap().dump(depth + 4, pool, w)?;
+                name_and_type.lookup(pool).unwrap().dump(depth + 4, pool, w)
+            }
+
+            Constant::FieldRef {
+                class,
+                name_and_type,
+            } => {
+                writeln!(w, "FieldRef ->")?;
+                class.lookup(pool).unwrap().dump(depth + 4, pool, w)?;
+                name_and_type.lookup(pool).unwrap().dump(depth + 4, pool, w)
+            }
+
+            Constant::InterfaceMethodRef {
+                class,
+                name_and_type,
+            } => {
+                writeln!(w, "InterfaceMethodRef ->")?;
+                class.lookup(pool).unwrap().dump(depth + 4, pool, w)?;
+                name_and_type.lookup(pool).unwrap().dump(depth + 4, pool, w)
+            }
+
+            Constant::NameAndTypeRef { name, descriptor } => {
+                writeln!(w, "NameAndTypeRef ->")?;
+                name.lookup(pool).unwrap().dump(depth + 4, pool, w)?;
+                descriptor.lookup(pool).unwrap().dump(depth + 4, pool, w)
+            }
+
+            Constant::MethodType(index) => {
+                writeln!(w, "MethodType ->")?;
+                index.lookup(pool).unwrap().dump(depth + 4, pool, w)
+            }
+
+            Constant::MethodHandleRef(handle) => {
+                writeln!(w, "MethodHandleRef ->")?;
+                let pad = " ".repeat(depth + 4);
+                write!(w, "{}", pad)?;
+                let index = match handle {
+                    MethodHandle::GetField(index) => {
+                        writeln!(w, "GetField ->")?;
+                        index
+                    }
+                    MethodHandle::GetStatic(index) => {
+                        writeln!(w, "GetStatic ->")?;
+                        index
+                    }
+                    MethodHandle::PutField(index) => {
+                        writeln!(w, "PutField ->")?;
+                        index
+                    }
+                    MethodHandle::PutStatic(index) => {
+                        writeln!(w, "PutStatic ->")?;
+                        index
+                    }
+                    MethodHandle::InvokeVirtual(index) => {
+                        writeln!(w, "InvokeVirtual ->")?;
+                        index
+                    }
+                    MethodHandle::InvokeDynamic(index) => {
+                        writeln!(w, "InvokeDynamic ->")?;
+                        index
+                    }
+                    MethodHandle::InvokeSpecial(index) => {
+                        writeln!(w, "InvokeSpecial ->")?;
+                        index
+                    }
+                    MethodHandle::NewInvokeSpecial(index) => {
+                        writeln!(w, "NewInvokeSpecial ->")?;
+                        index
+                    }
+                    MethodHandle::InvokeInterface(index) => {
+                        writeln!(w, "InvokeInterface ->")?;
+                        index
+                    }
+                };
+
+                index.lookup(pool).unwrap().dump(depth + 8, pool, w)
+            }
+
+            Constant::InvokeDynamicRef {
+                bootstrap,
+                name_and_type,
+            } => {
+                writeln!(w, "InvokeDynamicRef ->")?;
+                pool[bootstrap.0 as usize - 1].dump(depth + 4, pool, w)?;
+                name_and_type.lookup(pool).unwrap().dump(depth + 4, pool, w)
+            }
+
+            Constant::Padding => Ok(()),
+        }
     }
 }

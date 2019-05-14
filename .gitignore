@@ -6,3 +6,4 @@ etc/*.class
 *.txt
 *.json
 *.log
+.vscode/*

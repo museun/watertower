@@ -255,3 +255,162 @@ impl Attribute {
         })
     }
 }
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct BootstrapMethods {
+    method: ConstantIndex,
+    arguments: Vec<ConstantIndex>,
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum ElementValue {
+    Byte(ConstantIndex),
+    Char(ConstantIndex),
+    Double(ConstantIndex),
+    Float(ConstantIndex),
+    Integer(ConstantIndex),
+    Long(ConstantIndex),
+    Short(ConstantIndex),
+    Boolean(ConstantIndex),
+    String(ConstantIndex),
+    Enum {
+        ty: ConstantIndex,
+        val: ConstantIndex,
+    },
+    Class(ConstantIndex),
+    Anotation(Annotation),
+    Array(Vec<Self>),
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct ExceptionTableRow {
+    pub start_pc: u16,
+    pub end_pc: u16,
+    pub handler_pc: u16,
+    pub catch_type: ConstantIndex,
+}
+
+impl<R: Read> ReadType<R> for ExceptionTableRow {
+    type Output = Self;
+    fn read(reader: &mut Reader<'_, R>) -> Result<Self::Output> {
+        Ok(Self {
+            start_pc: reader.read_u16("start_pc")?,
+            end_pc: reader.read_u16("end_c")?,
+            handler_pc: reader.read_u16("handler_pc")?,
+            catch_type: ConstantIndex::read(reader)?,
+        })
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum StackMapFrame {
+    SameFrame {
+        offset: u8,
+    },
+    SameFrameExtended {
+        offset: u16,
+    },
+    SameLocalsOneStackItemFrame {
+        offset: u8,
+        stack_item: VerificationType,
+    },
+    SameLocalsOneStackItemFrameExtended {
+        offset: u16,
+        stack_item: VerificationType,
+    },
+    ChopFrame {
+        offset: u16,
+        absent_locals: u8,
+    },
+    AppendFrame {
+        offset: u16,
+        new_locals: Vec<VerificationType>,
+    },
+    FullFrame {
+        offset: u16,
+        locals: Vec<VerificationType>,
+        stack_items: Vec<VerificationType>,
+    },
+}
+
+impl<R: Read> ReadType<R> for StackMapFrame {
+    type Output = Self;
+    fn read(reader: &mut Reader<'_, R>) -> Result<Self::Output> {
+        let ty = reader.read_u8("stack_map_frame type")?;
+        match ty {
+            0...63 => Ok(StackMapFrame::SameFrame { offset: ty }),
+            64...127 => Ok(StackMapFrame::SameLocalsOneStackItemFrame {
+                offset: ty - 64,
+                stack_item: VerificationType::read(reader)?,
+            }),
+            247 => Ok(StackMapFrame::SameLocalsOneStackItemFrameExtended {
+                offset: reader.read_u16("same_locals_one_stack_item_frame_extended")?,
+                stack_item: VerificationType::read(reader)?,
+            }),
+            248...250 => Ok(StackMapFrame::ChopFrame {
+                offset: reader.read_u16("chop_frame")?,
+                absent_locals: (251 - ty),
+            }),
+            251 => Ok(StackMapFrame::SameFrameExtended {
+                offset: reader.read_u16("same_frame_extended")?,
+            }),
+            252...254 => {
+                let offset = reader.read_u16("append_frame")?;
+                let new_locals = reader.read_many(
+                    |reader| reader.read_u16("num_locals"),
+                    VerificationType::read,
+                )?;
+                Ok(StackMapFrame::AppendFrame { offset, new_locals })
+            }
+            255 => {
+                let offset = reader.read_u16("full_frame")?;
+                let locals = reader.read_many(
+                    |reader| reader.read_u16("num_locals"),
+                    VerificationType::read,
+                )?;
+                let stack_items = reader.read_many(
+                    |reader| reader.read_u16("num_stack_items"),
+                    VerificationType::read,
+                )?;
+                Ok(StackMapFrame::FullFrame {
+                    offset,
+                    locals,
+                    stack_items,
+                })
+            }
+            _ => Err(Error::InvalidStackFrameType(ty)),
+        }
+    }
+}
+
+#[derive(PartialEq, Debug, Clone, PartialOrd)]
+pub enum VerificationType {
+    Top,
+    Integer,
+    Float,
+    Long,
+    Double,
+    Null,
+    UninitializedThis,
+    Object(ConstantIndex),
+    Uninitialized(u16),
+}
+
+impl<R: Read> ReadType<R> for VerificationType {
+    type Output = Self;
+    fn read(reader: &mut Reader<'_, R>) -> Result<Self::Output> {
+        use VerificationType::*;
+        match reader.read_u8("verification_type")? {
+            0 => Ok(Top),
+            1 => Ok(Integer),
+            2 => Ok(Float),
+            3 => Ok(Long),
+            4 => Ok(Double),
+            5 => Ok(Null),
+            6 => Ok(UninitializedThis),
+            7 => ConstantIndex::read(reader).map(Object),
+            8 => reader.read_u16("uninitialized").map(Uninitialized),
+            e => Err(Error::InvalidVerificationType(e)),
+        }
+    }
+}

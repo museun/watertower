@@ -99,3 +99,39 @@ impl ClassFile {
         })
     }
 }
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct InnerClassInfo {
+    inner_class: ConstantIndex,
+    outer_class: ConstantIndex,
+    inner_class_name: ConstantIndex,
+    flags: InnerClassFlags,
+}
+
+bitflags! {
+    pub struct ClassFlags: u16 {
+        const PUBLIC     = 0x0001;
+        const FINAL      = 0x0010;
+        const SUPER      = 0x0020;
+        const ABSTRACT   = 0x0040;
+        const INTERFACE  = 0x0200;
+        const SYNTHETIC  = 0x1000;
+        const ANNOTATION = 0x2000;
+        const ENUM       = 0x4000;
+    }
+}
+
+bitflags! {
+    pub struct InnerClassFlags: u16 {
+        const PUBLIC     = 0x0001;
+        const PRIVATE    = 0x0002;
+        const PROTECTED  = 0x0004;
+        const STATIC     = 0x0008;
+        const FINAL      = 0x0010;
+        const ABSTRACT   = 0x0040;
+        const INTERFACE  = 0x0200;
+        const SYNTHETIC  = 0x1000;
+        const ANNOTATION = 0x2000;
+        const ENUM       = 0x4000;
+    }
+}
