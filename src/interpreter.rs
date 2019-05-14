@@ -1,10 +1,11 @@
+#![allow(dead_code)]
 type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug)]
 pub enum Error {}
 
 impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         unimplemented!()
     }
 }
@@ -55,7 +56,11 @@ impl Interpreter {
             );
 
             for attribute in method.attributes {
-                if let crate::parse::types::Attribute::Code { code, .. } = attribute {
+                if let crate::parse::types::Attribute::Code(crate::parse::types::Code {
+                    code,
+                    ..
+                }) = attribute
+                {
                     for inst in code {
                         eprintln!("0x{:02X} {:?}", inst, Instruction::lookup(inst).unwrap());
                     }

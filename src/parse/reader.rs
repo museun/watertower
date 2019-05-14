@@ -12,6 +12,15 @@ pub trait ReadTypeContext<R> {
     fn read(reader: &mut Reader<'_, R>, constants: &[Constant]) -> Result<Self::Output>;
 }
 
+pub trait ReadTypeContextIndexed<R> {
+    type Output;
+    fn read(
+        reader: &mut Reader<'_, R>,
+        constants: &[Constant],
+        index: ConstantIndex,
+    ) -> Result<Self::Output>;
+}
+
 pub struct Reader<'a, R> {
     source: &'a mut R,
     pos: usize,

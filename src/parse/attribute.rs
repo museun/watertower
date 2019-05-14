@@ -2,122 +2,29 @@ use super::*;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Attribute {
-    Code {
-        attribute_name: ConstantIndex,
-        max_stack: u16,
-        max_locals: u16,
-        code: Vec<u8>, // TODO instructions
-        exception_table: Vec<ExceptionTableRow>,
-        attributes: Vec<Attribute>,
-    },
-
-    SourceFile {
-        attribute_name: ConstantIndex,
-        source_file: ConstantIndex,
-    },
-
-    InnerClasses {
-        attribute_name: ConstantIndex,
-        classes: Vec<InnerClassInfo>,
-    },
-
-    EnclosingMethod {
-        attribute_name: ConstantIndex,
-        class: ConstantIndex,
-        method: ConstantIndex,
-    },
-
-    SourceDebugExtension {
-        attribute_name: ConstantIndex,
-        debug_extension: Vec<u8>, // TODO extension
-    },
-
-    ConstantValue {
-        attribute_name: ConstantIndex,
-        constant_value: ConstantIndex,
-    },
-
-    Exceptions {
-        attribute_name: ConstantIndex,
-        index_table: Vec<ConstantIndex>,
-    },
-
-    BootstrapMethods {
-        attribute_name: ConstantIndex,
-        methods: Vec<BootstrapMethods>,
-    },
-
-    AnnotationDefault {
-        attribute_name: ConstantIndex,
-        value: ElementValue,
-    },
-
-    MethodParameters {
-        attribute_name: ConstantIndex,
-    },
-
-    Synthetic {
-        attribute_name: ConstantIndex,
-    },
-
-    Deprecated {
-        attribute_name: ConstantIndex,
-    },
-
-    Signature {
-        attribute_name: ConstantIndex,
-        signature: ConstantIndex,
-    },
-
-    RuntimeVisibleAnnotations {
-        attribute_name: ConstantIndex,
-        annotations: Vec<Annotation>,
-    },
-
-    RuntimeInvisibleAnnotations {
-        attribute_name: ConstantIndex,
-        annotations: Vec<Annotation>,
-    },
-
-    LineNumberTable {
-        attribute_name: ConstantIndex,
-        table: Vec<(u16, u16)>, // TODO spans
-    },
-
-    LocalVariableTable {
-        attribute_name: ConstantIndex,
-        variables: Vec<LocalVariable>,
-    },
-
-    LocalVariableTypeTable {
-        attribute_name: ConstantIndex,
-        variables_types: Vec<LocalVariableType>,
-    },
-
-    StackMapTable {
-        attribute_name: ConstantIndex,
-        entries: Vec<StackMapFrame>,
-    },
-
-    RuntimeVisibleTypeAnnotations {
-        attribute_name: ConstantIndex,
-        annotations: Vec<Annotation>,
-    },
-
-    RuntimeInvisibleTypeAnnotations {
-        attribute_name: ConstantIndex,
-        annotations: Vec<Annotation>,
-    },
-
-    RuntimeVisibleParameterAnnotations {
-        attribute_name: ConstantIndex,
-        annotations_by_param_index: Vec<ParameterAnnotation>,
-    },
-
-    RuntimeInvisibleParameterAnnotations {
-        attribute_name: ConstantIndex,
-        annotations_by_param_index: Vec<ParameterAnnotation>,
-    },
+    Code(Code),
+    SourceFile(SourceFile),
+    InnerClasses(InnerClasses),
+    EnclosingMethod(EnclosingMethod),
+    SourceDebugExtension(SourceDebugExtension),
+    ConstantValue(ConstantValue),
+    Exceptions(Exceptions),
+    BootstrapMethods(BootstrapMethods),
+    AnnotationDefault(AnnotationDefault),
+    MethodParameters(MethodParameters),
+    Synthetic(Synthetic),
+    Deprecated(Deprecated),
+    Signature(Signature),
+    RuntimeVisibleAnnotations(RuntimeVisibleAnnotations),
+    RuntimeInvisibleAnnotations(RuntimeInvisibleAnnotations),
+    LineNumberTable(LineNumberTable),
+    LocalVariableTable(LocalVariableTable),
+    LocalVariableTypeTable(LocalVariableTypeTable),
+    StackMapTable(StackMapTable),
+    RuntimeVisibleTypeAnnotations(RuntimeVisibleTypeAnnotations),
+    RuntimeInvisibleTypeAnnotations(RuntimeInvisibleTypeAnnotations),
+    RuntimeVisibleParameterAnnotations(RuntimeVisibleParameterAnnotations),
+    RuntimeInvisibleParameterAnnotations(RuntimeInvisibleParameterAnnotations),
 }
 
 impl<R: Read> ReadTypeContext<R> for Attribute {
@@ -133,15 +40,31 @@ impl<R: Read> ReadTypeContext<R> for Attribute {
 
         let start = reader.read_u32("attribute_length")?;
         let pos = reader.pos();
-        let res = match ty.as_str() {
-            "ConstantValue" => Self::constant_value(index, reader),
-            "Code" => Self::code(index, reader, constants),
-            "StackMapTable" => Self::stack_map_table(index, reader),
-            "Exceptions" => Self::exceptions(index, reader),
-            "LineNumberTable" => Self::line_number_table(index, reader),
-            "SourceFile" => Self::source_file(index, reader),
-            _ => Err(Error::UnknownAttributeType(ty.to_string())),
-        };
+
+        macro_rules! parse_table {
+            ($($name:expr=> $ident:ident);* $(;)?) => {
+                 match ty.as_str() {
+                    $($name => $ident::read(reader, constants, index).map(Attribute::$ident),)*
+                    _ => {
+                        if cfg!(test) {
+                            panic!("unknown table: {}", ty)
+                        } else {
+                            Err(Error::UnknownAttributeType(ty.to_string()))
+                        }
+                    }
+                };
+            };
+        }
+
+        let res = parse_table!(
+            "ConstantValue"   => ConstantValue;
+            "Code"            => Code;
+            "StackMapTable"   => StackMapTable;
+            "Exceptions"      => Exceptions;
+            "LineNumberTable" => LineNumberTable;
+            "SourceFile"      => SourceFile;
+        );
+
         let end = (reader.pos() - pos) as u32;
         if start == end {
             res
@@ -155,22 +78,23 @@ impl<R: Read> ReadTypeContext<R> for Attribute {
     }
 }
 
-impl Attribute {
-    fn constant_value<R: Read>(
-        attribute_name: ConstantIndex,
-        reader: &mut Reader<'_, R>,
-    ) -> Result<Self> {
-        Ok(Attribute::ConstantValue {
-            attribute_name,
-            constant_value: ConstantIndex::read(reader)?,
-        })
-    }
+#[derive(PartialEq, Debug, Clone)]
+pub struct Code {
+    pub attribute_name: ConstantIndex,
+    pub max_stack: u16,
+    pub max_locals: u16,
+    pub code: Vec<u8>,
+    pub exception_table: Vec<ExceptionTableRow>,
+    pub attributes: Vec<Attribute>,
+}
 
-    fn code<R: Read>(
-        attribute_name: ConstantIndex,
+impl<R: Read> ReadTypeContextIndexed<R> for Code {
+    type Output = Self;
+    fn read(
         reader: &mut Reader<'_, R>,
         constants: &[Constant],
-    ) -> Result<Self> {
+        index: ConstantIndex,
+    ) -> Result<Self::Output> {
         let max_stack = reader.read_u16("max_stack")?;
         let max_locals = reader.read_u16("max_locals")?;
 
@@ -189,8 +113,8 @@ impl Attribute {
             |reader| Attribute::read(reader, constants),
         )?;
 
-        Ok(Attribute::Code {
-            attribute_name,
+        Ok(Self {
+            attribute_name: index,
             max_stack,
             max_locals,
             code,
@@ -198,68 +122,406 @@ impl Attribute {
             attributes,
         })
     }
+}
 
-    fn stack_map_table<R: Read>(
-        attribute_name: ConstantIndex,
-        reader: &mut Reader<'_, R>,
-    ) -> Result<Self> {
-        let entries = reader.read_many(
-            |reader| reader.read_u16("stack_map_table length"),
-            |reader| StackMapFrame::read(reader),
-        )?;
-        Ok(Attribute::StackMapTable {
-            attribute_name,
-            entries,
-        })
-    }
+#[derive(PartialEq, Debug, Clone)]
+pub struct SourceFile {
+    pub attribute_name: ConstantIndex,
+    pub source_file: ConstantIndex,
+}
 
-    fn exceptions<R: Read>(
-        attribute_name: ConstantIndex,
+impl<R: Read> ReadTypeContextIndexed<R> for SourceFile {
+    type Output = Self;
+    fn read(
         reader: &mut Reader<'_, R>,
-    ) -> Result<Self> {
-        let index_table = reader.read_many(
-            |reader| reader.read_u16("exceptions length"),
-            ConstantIndex::read,
-        )?;
-        Ok(Attribute::Exceptions {
-            attribute_name,
-            index_table,
-        })
-    }
-
-    fn line_number_table<R: Read>(
-        attribute_name: ConstantIndex,
-        reader: &mut Reader<'_, R>,
-    ) -> Result<Self> {
-        let table = reader.read_many(
-            |reader| reader.read_u16("line_number_table length"),
-            |reader| {
-                let start_pc = reader.read_u16("start_pc")?;
-                let line_no = reader.read_u16("line_number")?;
-                Ok((start_pc, line_no))
-            },
-        )?;
-        Ok(Attribute::LineNumberTable {
-            attribute_name,
-            table,
-        })
-    }
-
-    fn source_file<R: Read>(
-        attribute_name: ConstantIndex,
-        reader: &mut Reader<'_, R>,
-    ) -> Result<Self> {
-        Ok(Attribute::SourceFile {
-            attribute_name,
+        _constants: &[Constant],
+        index: ConstantIndex,
+    ) -> Result<Self::Output> {
+        Ok(Self {
+            attribute_name: index,
             source_file: ConstantIndex::read(reader)?,
         })
     }
 }
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct BootstrapMethods {
+pub struct InnerClasses {
+    pub attribute_name: ConstantIndex,
+    pub classes: Vec<InnerClassInfo>,
+}
+
+impl<R: Read> ReadTypeContextIndexed<R> for InnerClasses {
+    type Output = Self;
+    fn read(
+        _reader: &mut Reader<'_, R>,
+        _constants: &[Constant],
+        _index: ConstantIndex,
+    ) -> Result<Self::Output> {
+        unimplemented!()
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct EnclosingMethod {
+    pub attribute_name: ConstantIndex,
+    pub class: ConstantIndex,
     pub method: ConstantIndex,
-    pub arguments: Vec<ConstantIndex>,
+}
+
+impl<R: Read> ReadTypeContextIndexed<R> for EnclosingMethod {
+    type Output = Self;
+    fn read(
+        _reader: &mut Reader<'_, R>,
+        _constants: &[Constant],
+        _index: ConstantIndex,
+    ) -> Result<Self::Output> {
+        unimplemented!()
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct SourceDebugExtension {
+    pub attribute_name: ConstantIndex,
+    pub debug_extension: Vec<u8>,
+}
+
+impl<R: Read> ReadTypeContextIndexed<R> for SourceDebugExtension {
+    type Output = Self;
+    fn read(
+        _reader: &mut Reader<'_, R>,
+        _constants: &[Constant],
+        _index: ConstantIndex,
+    ) -> Result<Self::Output> {
+        unimplemented!()
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct ConstantValue {
+    pub attribute_name: ConstantIndex,
+    pub constant_value: ConstantIndex,
+}
+
+impl<R: Read> ReadTypeContextIndexed<R> for ConstantValue {
+    type Output = Self;
+    fn read(
+        reader: &mut Reader<'_, R>,
+        _constants: &[Constant],
+        index: ConstantIndex,
+    ) -> Result<Self::Output> {
+        Ok(Self {
+            attribute_name: index,
+            constant_value: ConstantIndex::read(reader)?,
+        })
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct Exceptions {
+    pub attribute_name: ConstantIndex,
+    pub index_table: Vec<ConstantIndex>,
+}
+
+impl<R: Read> ReadTypeContextIndexed<R> for Exceptions {
+    type Output = Self;
+    fn read(
+        reader: &mut Reader<'_, R>,
+        _constants: &[Constant],
+        index: ConstantIndex,
+    ) -> Result<Self::Output> {
+        Ok(Self {
+            attribute_name: index,
+            index_table: reader.read_many(
+                |reader| reader.read_u16("exceptions length"),
+                ConstantIndex::read,
+            )?,
+        })
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct BootstrapMethods {
+    pub attribute_name: ConstantIndex,
+    pub methods: Vec<BootstrapMethods>,
+}
+
+impl<R: Read> ReadTypeContextIndexed<R> for BootstrapMethods {
+    type Output = Self;
+    fn read(
+        _reader: &mut Reader<'_, R>,
+        _constants: &[Constant],
+        _index: ConstantIndex,
+    ) -> Result<Self::Output> {
+        unimplemented!()
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct AnnotationDefault {
+    pub attribute_name: ConstantIndex,
+    pub value: ElementValue,
+}
+
+impl<R: Read> ReadTypeContextIndexed<R> for AnnotationDefault {
+    type Output = Self;
+    fn read(
+        _reader: &mut Reader<'_, R>,
+        _constants: &[Constant],
+        _index: ConstantIndex,
+    ) -> Result<Self::Output> {
+        unimplemented!()
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct MethodParameters {
+    pub attribute_name: ConstantIndex,
+}
+
+impl<R: Read> ReadTypeContextIndexed<R> for MethodParameters {
+    type Output = Self;
+    fn read(
+        _reader: &mut Reader<'_, R>,
+        _constants: &[Constant],
+        _index: ConstantIndex,
+    ) -> Result<Self::Output> {
+        unimplemented!()
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct Synthetic {
+    pub attribute_name: ConstantIndex,
+}
+
+impl<R: Read> ReadTypeContextIndexed<R> for Synthetic {
+    type Output = Self;
+    fn read(
+        _reader: &mut Reader<'_, R>,
+        _constants: &[Constant],
+        _index: ConstantIndex,
+    ) -> Result<Self::Output> {
+        unimplemented!()
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct Deprecated {
+    pub attribute_name: ConstantIndex,
+}
+
+impl<R: Read> ReadTypeContextIndexed<R> for Deprecated {
+    type Output = Self;
+    fn read(
+        _reader: &mut Reader<'_, R>,
+        _constants: &[Constant],
+        _index: ConstantIndex,
+    ) -> Result<Self::Output> {
+        unimplemented!()
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct Signature {
+    pub attribute_name: ConstantIndex,
+    pub signature: ConstantIndex,
+}
+
+impl<R: Read> ReadTypeContextIndexed<R> for Signature {
+    type Output = Self;
+    fn read(
+        _reader: &mut Reader<'_, R>,
+        _constants: &[Constant],
+        _index: ConstantIndex,
+    ) -> Result<Self::Output> {
+        unimplemented!()
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct RuntimeVisibleAnnotations {
+    pub attribute_name: ConstantIndex,
+    pub annotations: Vec<Annotation>,
+}
+
+impl<R: Read> ReadTypeContextIndexed<R> for RuntimeVisibleAnnotations {
+    type Output = Self;
+    fn read(
+        _reader: &mut Reader<'_, R>,
+        _constants: &[Constant],
+        _index: ConstantIndex,
+    ) -> Result<Self::Output> {
+        unimplemented!()
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct RuntimeInvisibleAnnotations {
+    pub attribute_name: ConstantIndex,
+    pub annotations: Vec<Annotation>,
+}
+
+impl<R: Read> ReadTypeContextIndexed<R> for RuntimeInvisibleAnnotations {
+    type Output = Self;
+    fn read(
+        _reader: &mut Reader<'_, R>,
+        _constants: &[Constant],
+        _index: ConstantIndex,
+    ) -> Result<Self::Output> {
+        unimplemented!()
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct LineNumberTable {
+    pub attribute_name: ConstantIndex,
+    pub table: Vec<(u16, u16)>,
+}
+
+impl<R: Read> ReadTypeContextIndexed<R> for LineNumberTable {
+    type Output = Self;
+    fn read(
+        reader: &mut Reader<'_, R>,
+        _constants: &[Constant],
+        index: ConstantIndex,
+    ) -> Result<Self::Output> {
+        Ok(Self {
+            attribute_name: index,
+            table: reader.read_many(
+                |reader| reader.read_u16("line_number_table length"),
+                |reader| {
+                    let start_pc = reader.read_u16("start_pc")?;
+                    let line_no = reader.read_u16("line_number")?;
+                    Ok((start_pc, line_no))
+                },
+            )?,
+        })
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct LocalVariableTable {
+    pub attribute_name: ConstantIndex,
+    pub variables: Vec<LocalVariable>,
+}
+
+impl<R: Read> ReadTypeContextIndexed<R> for LocalVariableTable {
+    type Output = Self;
+    fn read(
+        _reader: &mut Reader<'_, R>,
+        _constants: &[Constant],
+        _index: ConstantIndex,
+    ) -> Result<Self::Output> {
+        unimplemented!()
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct LocalVariableTypeTable {
+    pub attribute_name: ConstantIndex,
+    pub variables_types: Vec<LocalVariableType>,
+}
+
+impl<R: Read> ReadTypeContextIndexed<R> for LocalVariableTypeTable {
+    type Output = Self;
+    fn read(
+        _reader: &mut Reader<'_, R>,
+        _constants: &[Constant],
+        _index: ConstantIndex,
+    ) -> Result<Self::Output> {
+        unimplemented!()
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct StackMapTable {
+    pub attribute_name: ConstantIndex,
+    pub entries: Vec<StackMapFrame>,
+}
+
+impl<R: Read> ReadTypeContextIndexed<R> for StackMapTable {
+    type Output = Self;
+    fn read(
+        reader: &mut Reader<'_, R>,
+        _constants: &[Constant],
+        index: ConstantIndex,
+    ) -> Result<Self::Output> {
+        Ok(StackMapTable {
+            attribute_name: index,
+            entries: reader.read_many(
+                |reader| reader.read_u16("stack_map_table length"),
+                |reader| StackMapFrame::read(reader),
+            )?,
+        })
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct RuntimeVisibleTypeAnnotations {
+    pub attribute_name: ConstantIndex,
+    pub annotations: Vec<Annotation>,
+}
+
+impl<R: Read> ReadTypeContextIndexed<R> for RuntimeVisibleTypeAnnotations {
+    type Output = Self;
+    fn read(
+        _reader: &mut Reader<'_, R>,
+        _constants: &[Constant],
+        _index: ConstantIndex,
+    ) -> Result<Self::Output> {
+        unimplemented!()
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct RuntimeInvisibleTypeAnnotations {
+    pub attribute_name: ConstantIndex,
+    pub annotations: Vec<Annotation>,
+}
+
+impl<R: Read> ReadTypeContextIndexed<R> for RuntimeInvisibleTypeAnnotations {
+    type Output = Self;
+    fn read(
+        _reader: &mut Reader<'_, R>,
+        _constants: &[Constant],
+        _index: ConstantIndex,
+    ) -> Result<Self::Output> {
+        unimplemented!()
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct RuntimeVisibleParameterAnnotations {
+    pub attribute_name: ConstantIndex,
+    pub annotations_by_param_index: Vec<ParameterAnnotation>,
+}
+
+impl<R: Read> ReadTypeContextIndexed<R> for RuntimeVisibleParameterAnnotations {
+    type Output = Self;
+    fn read(
+        _reader: &mut Reader<'_, R>,
+        _constants: &[Constant],
+        _index: ConstantIndex,
+    ) -> Result<Self::Output> {
+        unimplemented!()
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct RuntimeInvisibleParameterAnnotations {
+    pub attribute_name: ConstantIndex,
+    pub annotations_by_param_index: Vec<ParameterAnnotation>,
+}
+
+impl<R: Read> ReadTypeContextIndexed<R> for RuntimeInvisibleParameterAnnotations {
+    type Output = Self;
+    fn read(
+        _reader: &mut Reader<'_, R>,
+        _constants: &[Constant],
+        _index: ConstantIndex,
+    ) -> Result<Self::Output> {
+        unimplemented!()
+    }
 }
 
 #[derive(PartialEq, Debug, Clone)]

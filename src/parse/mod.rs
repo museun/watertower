@@ -7,7 +7,7 @@ pub use reader::Reader;
 
 use bitflags::bitflags;
 use error::Result;
-use reader::{ReadType, ReadTypeContext};
+use reader::{ReadType, ReadTypeContext, ReadTypeContextIndexed};
 use std::io::Read;
 
 mod annotation;
@@ -22,7 +22,13 @@ use types::*;
 pub mod types {
     pub use super::annotation::{Annotation, ParameterAnnotation};
     pub use super::attribute::{
-        Attribute, BootstrapMethods, ElementValue, ExceptionTableRow, StackMapFrame,
+        AnnotationDefault, Attribute, BootstrapMethods, Code, ConstantValue, Deprecated,
+        ElementValue, EnclosingMethod, ExceptionTableRow, Exceptions, InnerClasses,
+        LineNumberTable, LocalVariableTable, LocalVariableTypeTable, MethodParameters,
+        RuntimeInvisibleAnnotations, RuntimeInvisibleParameterAnnotations,
+        RuntimeInvisibleTypeAnnotations, RuntimeVisibleAnnotations,
+        RuntimeVisibleParameterAnnotations, RuntimeVisibleTypeAnnotations, Signature,
+        SourceDebugExtension, SourceFile, StackMapFrame, StackMapTable, Synthetic,
         VerificationType,
     };
     pub use super::class::{ClassFile, ClassFlags, InnerClassFlags, InnerClassInfo};
