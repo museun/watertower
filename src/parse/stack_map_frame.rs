@@ -30,9 +30,9 @@ pub enum StackMapFrame {
         stack_items: Vec<VerificationType>,
     },
 }
-
-impl StackMapFrame {
-    pub(super) fn read<R: Read>(reader: &mut Reader<'_, R>) -> Result<Self> {
+impl<R: Read> ReadType<R> for StackMapFrame {
+    type Output = Self;
+    fn read(reader: &mut Reader<'_, R>) -> Result<Self::Output> {
         let ty = reader.read_u8("stack_map_frame type")?;
         match ty {
             0...63 => Ok(StackMapFrame::SameFrame { offset: ty }),

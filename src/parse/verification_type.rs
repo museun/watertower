@@ -13,8 +13,9 @@ pub enum VerificationType {
     Uninitialized(u16),
 }
 
-impl VerificationType {
-    pub(super) fn read<R: Read>(reader: &mut Reader<'_, R>) -> Result<Self> {
+impl<R: Read> ReadType<R> for VerificationType {
+    type Output = Self;
+    fn read(reader: &mut Reader<'_, R>) -> Result<Self::Output> {
         use VerificationType::*;
         match reader.read_u8("verification_type")? {
             0 => Ok(Top),

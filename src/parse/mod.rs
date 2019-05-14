@@ -7,6 +7,7 @@ pub use reader::Reader;
 
 use bitflags::bitflags;
 use error::Result;
+use reader::{ReadType, ReadTypeContext};
 use std::io::Read;
 
 mod annotation;

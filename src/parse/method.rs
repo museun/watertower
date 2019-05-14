@@ -8,11 +8,9 @@ pub struct Method {
     pub attributes: Vec<Attribute>,
 }
 
-impl Method {
-    pub(super) fn read<R: Read>(
-        reader: &mut Reader<'_, R>,
-        constants: &[Constant],
-    ) -> Result<Self> {
+impl<R: Read> ReadTypeContext<R> for Method {
+    type Output = Self;
+    fn read(reader: &mut Reader<'_, R>, constants: &[Constant]) -> Result<Self> {
         let flags = reader
             .read_u16("access_flags")
             .map(MethodFlags::from_bits)?

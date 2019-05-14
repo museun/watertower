@@ -3,11 +3,14 @@ use super::*;
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
 pub struct ConstantIndex(pub u16);
 
-impl ConstantIndex {
-    pub(super) fn read<R: Read>(reader: &mut Reader<'_, R>) -> Result<Self> {
+impl<R: Read> ReadType<R> for ConstantIndex {
+    type Output = Self;
+    fn read(reader: &mut Reader<'_, R>) -> Result<Self::Output> {
         reader.read_u16("constant index").map(Self)
     }
+}
 
+impl ConstantIndex {
     // TODO impl this as Index on &'a [T] where T: Constant
     pub fn lookup(self, pool: &[Constant]) -> Result<&Constant> {
         if self.0 == 0 {

@@ -120,11 +120,9 @@ pub enum Attribute {
     },
 }
 
-impl Attribute {
-    pub(super) fn read<R: Read>(
-        reader: &mut Reader<'_, R>,
-        constants: &[Constant],
-    ) -> Result<Self> {
+impl<R: Read> ReadTypeContext<R> for Attribute {
+    type Output = Self;
+    fn read(reader: &mut Reader<'_, R>, constants: &[Constant]) -> Result<Self::Output> {
         let index = reader.read_u16("attribute_name_index").map(ConstantIndex)?;
         let constant = index.lookup(&constants)?;
 
@@ -155,7 +153,9 @@ impl Attribute {
             }))
         }
     }
+}
 
+impl Attribute {
     fn constant_value<R: Read>(
         attribute_name: ConstantIndex,
         reader: &mut Reader<'_, R>,

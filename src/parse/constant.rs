@@ -168,8 +168,9 @@ impl Constant {
     }
 }
 
-impl Constant {
-    pub(super) fn read<R: Read>(reader: &mut Reader<'_, R>) -> Result<Self> {
+impl<R: Read> ReadType<R> for Constant {
+    type Output = Self;
+    fn read(reader: &mut Reader<'_, R>) -> Result<Self> {
         match reader.read_u8("tag")? {
             1 => Self::utf8(reader),
             3 => Self::integer(reader),
@@ -188,7 +189,9 @@ impl Constant {
             e => Err(Error::UnknownTag(e)),
         }
     }
+}
 
+impl Constant {
     #[inline]
     pub fn get_tag(self) -> Option<u8> {
         match self {

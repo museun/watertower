@@ -8,11 +8,9 @@ pub struct Field {
     pub attributes: Vec<Attribute>,
 }
 
-impl Field {
-    pub(super) fn read<R: Read>(
-        reader: &mut Reader<'_, R>,
-        constants: &[Constant],
-    ) -> Result<Self> {
+impl<R: Read> ReadTypeContext<R> for Field {
+    type Output = Self;
+    fn read(reader: &mut Reader<'_, R>, constants: &[Constant]) -> Result<Self> {
         let flags = reader
             .read_u16("field_flags")
             .map(FieldFlags::from_bits)?

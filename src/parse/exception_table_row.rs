@@ -8,17 +8,14 @@ pub struct ExceptionTableRow {
     pub catch_type: ConstantIndex,
 }
 
-impl ExceptionTableRow {
-    pub(super) fn read<R: Read>(reader: &mut Reader<'_, R>) -> Result<Self> {
-        let start_pc = reader.read_u16("start_pc")?;
-        let end_pc = reader.read_u16("end_c")?;
-        let handler_pc = reader.read_u16("handler_pc")?;
-        let catch_type = ConstantIndex::read(reader)?;
+impl<R: Read> ReadType<R> for ExceptionTableRow {
+    type Output = Self;
+    fn read(reader: &mut Reader<'_, R>) -> Result<Self::Output> {
         Ok(Self {
-            start_pc,
-            end_pc,
-            handler_pc,
-            catch_type,
+            start_pc: reader.read_u16("start_pc")?,
+            end_pc: reader.read_u16("end_c")?,
+            handler_pc: reader.read_u16("handler_pc")?,
+            catch_type: ConstantIndex::read(reader)?,
         })
     }
 }
