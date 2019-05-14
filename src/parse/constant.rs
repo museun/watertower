@@ -1,6 +1,6 @@
 use super::*;
 
-#[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
+#[derive(Default, Debug, Copy, Clone, PartialEq, PartialOrd)]
 pub struct ConstantIndex(pub u16);
 
 impl<R: Read> ReadType<'_, R> for ConstantIndex {

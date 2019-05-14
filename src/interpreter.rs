@@ -5,23 +5,36 @@ use crate::parse::types as ty;
 use crate::parse::types::attribute as attr;
 
 #[derive(Debug)]
-pub enum Error {}
+pub enum Error {
+    Parse(crate::parse::Error),
+}
 
-impl std::fmt::Display for Error {
-    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        unimplemented!()
+impl From<crate::parse::Error> for Error {
+    fn from(err: crate::parse::Error) -> Self {
+        Error::Parse(err)
     }
 }
 
 impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        None
+        match self {
+            Error::Parse(err) => Some(err),
+        }
+    }
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::Parse(err) => write!(f, "{}", err),
+        }
     }
 }
 
 #[derive(Debug, PartialEq)]
 pub enum Value {}
 
+#[derive(Default)]
 pub struct Interpreter {
     classfile: ty::ClassFile,
     pc: usize,
@@ -30,18 +43,17 @@ pub struct Interpreter {
 }
 
 impl Interpreter {
-    pub fn new<'a, R, I>(reader: I) -> Self
+    pub fn new<'a, R, I>(reader: I) -> Result<Self>
     where
         R: std::io::Read + 'a,
         I: Into<crate::parse::Reader<'a, R>>,
     {
-        Self {
-            classfile: ty::ClassFile::read(reader) //
-                .expect("valid class file"),
-            pc: 0,
-            stack: vec![],
-            sp: 0,
-        }
+        ty::ClassFile::read(reader)
+            .map(|classfile| Self {
+                classfile,
+                ..Default::default()
+            })
+            .map_err(Into::into)
     }
 
     pub fn run(self) {
@@ -83,7 +95,9 @@ mod tests {
     #[test]
     fn something() {
         let fi = std::fs::read("./etc/hello.class").unwrap();
-        Interpreter::new(&mut fi.as_slice()).run();
+        Interpreter::new(&mut fi.as_slice())
+            .unwrap_or_else(|err| panic!("{}", err))
+            .run();
     }
 }
 
