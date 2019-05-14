@@ -45,24 +45,38 @@ impl<R: Read> ReadTypeContext<R> for Attribute {
             ($($name:expr=> $ident:ident);* $(;)?) => {
                  match ty.as_str() {
                     $($name => $ident::read(reader, constants, index).map(Attribute::$ident),)*
-                    _ => {
-                        if cfg!(test) {
-                            panic!("unknown table: {}", ty)
-                        } else {
-                            Err(Error::UnknownAttributeType(ty.to_string()))
-                        }
-                    }
+                    _ => Err(Error::UnknownAttributeType(ty.to_string())),
                 };
             };
         }
 
+        // https://docs.oracle.com/javase/specs/jvms/se8/html/jvms-4.html#jvms-4.7
         let res = parse_table!(
-            "ConstantValue"   => ConstantValue;
-            "Code"            => Code;
-            "StackMapTable"   => StackMapTable;
-            "Exceptions"      => Exceptions;
-            "LineNumberTable" => LineNumberTable;
-            "SourceFile"      => SourceFile;
+            "ConstantValue"                        => ConstantValue;
+            "Code"                                 => Code;
+            "StackMapTable"                        => StackMapTable;
+            "Exceptions"                           => Exceptions;
+            "BootstrapMethods"                     => BootstrapMethods;
+
+            "InnerClasses"                         => InnerClasses;
+            "EnclosingMethod"                      => EnclosingMethod;
+            "Synthetic"                            => Synthetic;
+            "Signature"                            => Signature;
+            "RuntimeVisibleAnnotations"            => RuntimeVisibleAnnotations;
+            "RuntimeInvisibleAnnotations"          => RuntimeInvisibleAnnotations;
+            "RuntimeVisibleParameterAnnotations"   => RuntimeVisibleParameterAnnotations;
+            "RuntimeInvisibleParameterAnnotations" => RuntimeInvisibleParameterAnnotations;
+            "RuntimeVisibleTypeAnnotations"        => RuntimeVisibleTypeAnnotations;
+            "RuntimeInvisibleTypeAnnotations"      => RuntimeInvisibleTypeAnnotations;
+            "AnnotationDefault"                    => AnnotationDefault;
+            "MethodParameters"                     => MethodParameters;
+
+            "SourceFile"                           => SourceFile;
+            "SourceDebugExtension"                 => SourceDebugExtension;
+            "LineNumberTable"                      => LineNumberTable;
+            "LocalVariableTable"                   => LocalVariableTable;
+            "LocalVariableTypeTable"               => LocalVariableTypeTable;
+            "Deprecated"                           => Deprecated;
         );
 
         let end = (reader.pos() - pos) as u32;
