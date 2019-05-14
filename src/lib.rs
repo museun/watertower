@@ -1,4 +1,4 @@
-pub mod interpreter;
+pub mod exec;
 pub mod parse;
 
 #[cfg(test)]

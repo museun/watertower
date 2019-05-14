@@ -95,6 +95,15 @@ impl ClassFile {
             attributes,
         })
     }
+    pub fn get_class_name(&self) -> &str {
+        match self.this_class.lookup(&self.constant_pool) {
+            Ok(Constant::ClassRef(i)) => match i.lookup(&self.constant_pool) {
+                Ok(Constant::Utf8(s)) => &s,
+                e => unreachable!("{:#?}", e),
+            },
+            e => unreachable!("{:#?}", e),
+        }
+    }
 }
 
 #[derive(PartialEq, Debug, Clone)]
