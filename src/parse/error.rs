@@ -45,12 +45,9 @@ impl std::fmt::Display for Error {
             Error::InvalidString(err) => write!(f, "invalid utf-8 string: {}", err),
             Error::ZeroIndex => write!(f, "invalid index: zero index"),
             Error::OutOfRange(d) => write!(f, "out of range: {}", d),
-            Error::IndexInsideDoubleWidthConstant(d) => write!(
-                f,
-                "i
-                ndex inside of a double widht constant: {}",
-                d
-            ),
+            Error::IndexInsideDoubleWidthConstant(d) => {
+                write!(f, "index inside of a double widht constant: {}", d)
+            }
             Error::InvalidAttributeType(d) => write!(f, "invalid attribute type: {:?}", d),
             Error::InvalidStackFrameType(d) => write!(f, "invalid stack frame type: {:#X?}", d),
             Error::InvalidVerificationType(d) => write!(f, "invalid verification type: {:#X?}", d),
