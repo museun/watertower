@@ -6,6 +6,8 @@ pub struct Method {
     pub name: ConstantIndex,
     pub descriptor: ConstantIndex,
     pub attributes: Vec<Attribute>,
+
+    name_str: String,
 }
 
 impl<'a, R: Read> ReadType<'a, R> for Method {
@@ -28,6 +30,8 @@ impl<'a, R: Read> ReadType<'a, R> for Method {
             name,
             descriptor,
             attributes,
+
+            name_str: context.constants.lookup(name)?,
         })
     }
 }
@@ -40,6 +44,10 @@ impl Method {
             }
         }
         None
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name_str
     }
 }
 

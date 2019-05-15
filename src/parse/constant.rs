@@ -1,5 +1,55 @@
 use super::*;
 
+pub trait Lookup {
+    fn lookup<T>(&self, index: ConstantIndex) -> Result<T>
+    where
+        T: Extract + Clone;
+}
+
+pub trait Extract: Sized {
+    fn extract(constant: &Constant) -> Option<Self>;
+    fn field() -> &'static str;
+}
+
+macro_rules! extract_impl {
+    ($($kind:ident => $arg:ident);* $(;)?) => {
+        $(
+            impl Extract for $arg {
+                fn extract(constant: &Constant) -> Option<$arg> {
+                    match constant {
+                        Constant::$kind(d) => Some(d.clone()),
+                        _ => None,
+                    }
+                }
+                fn field() -> &'static str {
+                    stringify!($kind)
+                }
+            }
+        )*
+    };
+}
+
+extract_impl! {
+    Integer => u32 ;
+    Float => f32 ;
+    Long => u64 ;
+    Double => f64 ;
+    Utf8 => String ;
+}
+
+impl<E> Lookup for E
+where
+    E: AsRef<[Constant]>,
+{
+    fn lookup<T>(&self, index: ConstantIndex) -> Result<T>
+    where
+        T: Extract + Clone,
+    {
+        let constant = index.lookup(self.as_ref())?;
+        T::extract(&constant).ok_or_else(|| Error::MissingField { field: T::field() })
+    }
+}
+
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
 pub struct ConstantIndex(pub u16);
 
@@ -27,7 +77,7 @@ impl ConstantIndex {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Constant {
     Integer(u32),
     Float(f32),
@@ -107,7 +157,7 @@ impl Constant {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct MethodRef {
     pub class: ConstantIndex,
     pub name_and_type: ConstantIndex,
@@ -124,7 +174,7 @@ impl<R: Read> ReadType<'_, R> for MethodRef {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FieldRef {
     pub class: ConstantIndex,
     pub name_and_type: ConstantIndex,
@@ -141,7 +191,7 @@ impl<R: Read> ReadType<'_, R> for FieldRef {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct InterfaceMethodRef {
     pub class: ConstantIndex,
     pub name_and_type: ConstantIndex,
@@ -158,7 +208,7 @@ impl<R: Read> ReadType<'_, R> for InterfaceMethodRef {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct NameAndTypeRef {
     pub name: ConstantIndex,
     pub descriptor: ConstantIndex,
@@ -175,7 +225,7 @@ impl<R: Read> ReadType<'_, R> for NameAndTypeRef {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct InvokeDynamicRef {
     pub bootstrap: MethodIndex,
     pub name_and_type: ConstantIndex,
