@@ -11,8 +11,13 @@ use crate::parse::types::attribute as attr;
 
 #[allow(unused_imports)]
 use cache::*;
+
 #[allow(unused_imports)]
 use error::*;
 
 use instructions::*;
+
+#[doc(inline)]
+pub use instructions::Instruction;
+
 use value::*;
