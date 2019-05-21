@@ -114,6 +114,23 @@ pub struct InnerClassInfo {
     flags: InnerClassFlags,
 }
 
+impl<'a, R: Read> ReadType<'a, R> for InnerClassInfo {
+    type Output = Self;
+    type Context = super::attribute::ReadIndexContext<'a>;
+    fn read(reader: &mut Reader<'_, R>, context: &'a Self::Context) -> Result<Self::Output> {
+        let null = NullContext;
+        Ok(Self {
+            inner_class: ConstantIndex::read(reader, &null)?,
+            outer_class: ConstantIndex::read(reader, &null)?,
+            inner_class_name: ConstantIndex::read(reader, &null)?,
+            flags: reader
+                .read_u16("inner_class_flags")
+                .map(InnerClassFlags::from_bits)?
+                .expect("valid flags"),
+        })
+    }
+}
+
 bitflags! {
     pub struct ClassFlags: u16 {
         const PUBLIC     = 0x0001;

@@ -107,6 +107,7 @@ pub struct ReadIndexContext<'a> {
     index: ConstantIndex,
 }
 
+// https://docs.oracle.com/javase/specs/jvms/se8/html/jvms-4.html#jvms-4.7.3
 #[derive(PartialEq, Debug, Clone)]
 pub struct Code {
     pub attribute_name: ConstantIndex,
@@ -170,6 +171,7 @@ impl<'a, R: Read> ReadType<'a, R> for SourceFile {
     }
 }
 
+// https://docs.oracle.com/javase/specs/jvms/se8/html/jvms-4.html#jvms-4.7.6
 #[derive(PartialEq, Debug, Clone)]
 pub struct InnerClasses {
     pub attribute_name: ConstantIndex,
@@ -179,8 +181,18 @@ pub struct InnerClasses {
 impl<'a, R: Read> ReadType<'a, R> for InnerClasses {
     type Output = Self;
     type Context = ReadIndexContext<'a>;
-    fn read(_reader: &mut Reader<'_, R>, _context: &Self::Context) -> Result<Self::Output> {
-        unimplemented!()
+    fn read(reader: &mut Reader<'_, R>, context: &Self::Context) -> Result<Self::Output> {
+        Ok(Self {
+            attribute_name: context.index,
+            classes: reader.read_many(
+                |reader| {
+                    reader
+                        .read_u32("innerclasses attribute_length")
+                        .map(|k| k as usize)
+                },
+                |reader| InnerClassInfo::read(reader, context),
+            )?,
+        })
     }
 }
 
@@ -213,6 +225,7 @@ impl<'a, R: Read> ReadType<'a, R> for SourceDebugExtension {
     }
 }
 
+// https://docs.oracle.com/javase/specs/jvms/se8/html/jvms-4.html#jvms-4.7.2
 #[derive(PartialEq, Debug, Clone)]
 pub struct ConstantValue {
     pub attribute_name: ConstantIndex,

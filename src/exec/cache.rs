@@ -1,11 +1,9 @@
 use super::*;
 
-use std::rc::Rc;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Debug;
-
-
+use std::rc::Rc;
 
 pub trait Lookup<T: Clone + Debug>: Debug {
     fn lookup(&self, index: usize) -> Option<&T>;
@@ -46,6 +44,6 @@ impl<T: Clone + Debug> Cache<T> {
             return method;
         }
 
-        unimplemented!("what to do here?")
+        unreachable!("item must exist in cache")
     }
 }
