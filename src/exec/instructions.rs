@@ -1,6 +1,6 @@
 pub trait JvmInstruction {
-    fn description() -> &'static str;
-    fn opcode() -> u8;
+    fn description(&self) -> &'static str;
+    fn opcode(&self) -> u8;
 }
 
 macro_rules! instruction {
@@ -9,11 +9,11 @@ macro_rules! instruction {
 
     (@impl_ $inst:ident, $opcode:expr, $doc:expr) => {
         impl JvmInstruction for $inst {
-            fn description() -> &'static str {
+            fn description(&self) -> &'static str {
                 $doc
             }
             #[inline]
-            fn opcode() -> u8 {
+            fn opcode(&self) -> u8 {
                 $opcode
             }
         }
@@ -111,6 +111,12 @@ macro_rules! instruction {
                     true
                 } else {
                     false
+                }
+            }
+
+            pub fn description(&self) -> &'static str {
+                match self {
+                    $(Instruction::$inst(d) => d.description(),)*
                 }
             }
         }

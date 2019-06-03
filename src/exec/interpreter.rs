@@ -1,3 +1,5 @@
+#![allow(dead_code, unused_variables, unused_mut)]
+
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -15,6 +17,23 @@ enum StackValue {
     None,
     Null,
     Integer(i64),
+}
+
+macro_rules! stack_value_integer {
+    ($($ty:ty)*) => {
+        $(
+            impl From<$ty> for StackValue {
+                fn from(d: $ty) -> Self {
+                    StackValue::Integer(d as i64)
+                }
+            }
+        )*
+    };
+}
+
+stack_value_integer! {
+    u8 u16 u32 u64 usize
+    i8 i16 i32 i64 isize
 }
 
 #[derive(Debug, Clone)]
@@ -146,7 +165,10 @@ impl Interpreter {
     }
 
     pub fn run(mut self) -> Result<()> {
-        let class = self
+        // TODO make this work properly
+        self.main_class = "hello".into();
+
+        let class = &self
             .classes
             .get(&self.main_class)
             .ok_or_else(|| Error::MissingMainClass)
@@ -215,10 +237,104 @@ impl Interpreter {
     fn execute(
         &mut self,
         instruction: &Instruction,
-        stack_frame: &mut StackFrame,
+        mut stack_frame: &mut StackFrame,
         context: &mut Context,
     ) -> Result<State> {
+        match instruction {
+            Instruction::NOP(..) => return Ok(State::Continue),
+            Instruction::ACONST_NULL(..) => stack_frame.push(StackValue::Null),
+            //
+            Instruction::ICONST_M1(..) => stack_frame.push(-1),
+            Instruction::ICONST_0(..) => stack_frame.push(0),
+            Instruction::ICONST_1(..) => stack_frame.push(1),
+            Instruction::ICONST_2(..) => stack_frame.push(2),
+            Instruction::ICONST_3(..) => stack_frame.push(3),
+            Instruction::ICONST_4(..) => stack_frame.push(4),
+            Instruction::ICONST_5(..) => stack_frame.push(5),
+            //
+            Instruction::BIPUSH(BIPUSH(d)) => stack_frame.push(*d),
+            Instruction::SIPUSH(SIPUSH(d, ..)) => stack_frame.push(*d),
+            //
+            Instruction::ILOAD(ILOAD(offset)) => {
+                Self::exec_iload(&mut stack_frame, usize::from(*offset))?
+            }
+            Instruction::ILOAD_0(..) => Self::exec_iload(&mut stack_frame, 0)?,
+            Instruction::ILOAD_1(..) => Self::exec_iload(&mut stack_frame, 1)?,
+            Instruction::ILOAD_2(..) => Self::exec_iload(&mut stack_frame, 2)?,
+            Instruction::ILOAD_3(..) => Self::exec_iload(&mut stack_frame, 3)?,
+            //
+            Instruction::ISTORE(ISTORE(offset)) => {
+                Self::exec_istore(&mut stack_frame, usize::from(*offset))?
+            }
+            Instruction::ISTORE_0(..) => Self::exec_istore(&mut stack_frame, 0)?,
+            Instruction::ISTORE_1(..) => Self::exec_istore(&mut stack_frame, 1)?,
+            Instruction::ISTORE_2(..) => Self::exec_istore(&mut stack_frame, 2)?,
+            Instruction::ISTORE_3(..) => Self::exec_istore(&mut stack_frame, 3)?,
+            //
+            Instruction::IADD(..) => match (stack_frame.pop(), stack_frame.pop()) {
+                (Some(StackValue::Integer(lhs)), Some(StackValue::Integer(rhs))) => {
+                    stack_frame.push(StackValue::Integer(lhs + rhs)) // TODO check for overflow
+                }
+                (Some(..), Some(..)) => return Err(Error::StackType("integer")),
+                (None, None) | (Some(..), None) => return Err(Error::EmptyStack),
+                _ => generic_error!("invalid state for IADD"), // TODO this should be a panic
+            },
+            //
+            Instruction::IINC(IINC(offset, _value)) => {
+                let offset = usize::from(*offset);
+                match stack_frame.get_variable_mut(offset) {
+                    Some(LocalVariable::Integer(val)) => *val = *val + 1,
+                    Some(..) => return Err(Error::VariableType("integer", offset)),
+                    None => return Err(Error::VariableOutOfScope),
+                }
+            }
+            //
+            Instruction::GOTO(GOTO(offset, _)) => {
+                return Ok(State::GotoRelative(usize::from(*offset)))
+            }
+            Instruction::RETURN(..) => return Ok(State::Return(StackValue::None)),
+            Instruction::IRETURN(..) => {
+                return match stack_frame.pop() {
+                    Some(StackValue::Integer(ret)) => Ok(State::Return(StackValue::Integer(ret))),
+                    Some(..) => Err(Error::StackType("integer")),
+                    None => Err(Error::EmptyStack),
+                }
+            }
+            //
+            Instruction::GETSTATIC(GETSTATIC(a, b)) => {}
+            Instruction::INVOKEVIRTUAL(INVOKEVIRTUAL(a, b)) => {}
+            //
+            Instruction::LDC(LDC(offset)) => {}
+            e => eprintln!("unhandled instruction: {}", e),
+        }
+
         Ok(State::Continue)
+    }
+
+    fn exec_iload(stack_frame: &mut StackFrame, offset: usize) -> Result<()> {
+        let val = match stack_frame.get_variable(offset) {
+            Some(LocalVariable::Integer(val)) => *val,
+            Some(LocalVariable::None) => {
+                generic_error!("local variable at index {} is not defined", offset);
+            }
+            Some(..) => generic_error!("local variable at index {} is not an integer", offset),
+            None => generic_error!("local variable at index {} is out of range", offset),
+        };
+        stack_frame.push(StackValue::Integer(val));
+        Ok(())
+    }
+
+    fn exec_istore(stack_frame: &mut StackFrame, offset: usize) -> Result<()> {
+        match stack_frame.pop() {
+            Some(StackValue::Integer(val)) => {
+                stack_frame.set_variable(offset, LocalVariable::Integer(val));
+                Ok(())
+            }
+            _ => Err(Error::GenericError(format!(
+                "stack value at index {} is not an integer",
+                offset
+            ))),
+        }
     }
 }
 
@@ -242,6 +358,49 @@ mod tests {
             .load_class_from_reader(&mut fi.as_slice())
             .unwrap();
 
-        eprintln!("{:#?}", interpreter);
+        for method in &interpreter.classes["hello"].methods {
+            for d in &method.get_code().unwrap().code {
+                let inst = Instruction::lookup(*d).unwrap();
+                eprintln!("{:02X} -> {}", d, inst);
+                eprintln!("  {}", wrap_line(inst.description(), 30));
+            }
+        }
+
+        // interpreter.run().unwrap();
+    }
+
+    enum Line<'a> {
+        Single(&'a str),
+        Many(Vec<&'a str>),
+    }
+
+    impl<'a> std::fmt::Display for Line<'a> {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                Line::Single(s) => write!(f, "{}", s),
+                Line::Many(list) => {
+                    for el in list {
+                        writeln!(f, "{}", el)?;
+                    }
+                    Ok(())
+                }
+            }
+        }
+    }
+
+    fn wrap_line(mut s: &str, max: usize) -> Line<'_> {
+        if s.len() <= max {
+            return Line::Single(s);
+        }
+        let mut parts = vec![];
+
+        let mut s = &mut s;
+        for i in 0..(s.len() % max) - 1 {
+            let t = &s[i * s.len()..];
+            parts.push(&t[..std::cmp::min(s.len(), max)]);
+            *s = t;
+        }
+
+        Line::Many(parts)
     }
 }

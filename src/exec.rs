@@ -1,7 +1,9 @@
 #![allow(dead_code)]
 
-pub mod cache;
+#[macro_use]
 pub mod error;
+
+pub mod cache;
 pub mod instructions;
 pub mod interpreter;
 pub mod value;
@@ -20,4 +22,4 @@ use instructions::*;
 #[doc(inline)]
 pub use instructions::Instruction;
 
-use value::*;
+//use value::*;

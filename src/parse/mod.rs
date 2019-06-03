@@ -16,7 +16,6 @@ pub mod constant;
 mod field;
 mod method;
 
-use constant::{Extract, Lookup};
 use types::*;
 
 pub mod types {

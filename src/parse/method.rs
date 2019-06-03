@@ -25,12 +25,13 @@ impl<'a, R: Read> ReadType<'a, R> for Method {
             |reader| reader.read_u16("attributes_count"), //
             |reader| Attribute::read(reader, &context),
         )?;
+
+        use super::constant::Lookup;
         Ok(Self {
             flags,
             name,
             descriptor,
             attributes,
-
             name_str: context.constants.lookup(name)?,
         })
     }
